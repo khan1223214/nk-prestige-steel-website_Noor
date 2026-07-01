@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate, Navigate } from "react-router-dom";
+import { useNavigate, Navigate, Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
 import { Lock } from "@phosphor-icons/react";
@@ -73,6 +73,9 @@ export default function Login() {
                 {busy ? "Signing in…" : "Sign In"}
               </button>
             </form>
+            <Link to="/forgot-password" className="mt-6 inline-block text-xs uppercase tracking-widest text-[#94A3B8] hover:text-[#D4AF37]" data-testid="forgot-link">
+              Forgot password?
+            </Link>
           </div>
         </div>
       </div>

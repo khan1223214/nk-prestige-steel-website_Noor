@@ -1,0 +1,30 @@
+{
+  "short_name": "NK Prestige Steel",
+  "name": "NK Prestige Steel Corporation — Scrap Dealer",
+  "description": "Karnataka's Premium Scrap Dealer. Live prices, doorstep pickup, GST invoicing.",
+  "icons": [
+    {
+      "src": "/logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#060B14",
+  "background_color": "#060B14",
+  "categories": ["business", "utilities"],
+  "shortcuts": [
+    { "name": "Live Prices", "url": "/prices" },
+    { "name": "Request Pickup", "url": "/pickup" },
+    { "name": "Call Owner", "url": "tel:+919741309869" }
+  ]
+}

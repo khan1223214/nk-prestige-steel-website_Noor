@@ -7,9 +7,11 @@ import os
 import io
 import uuid
 import logging
+import secrets
 import bcrypt
 import jwt as pyjwt
 import requests
+import httpx
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
@@ -132,6 +134,7 @@ def init_storage():
 
 
 def put_object(path: str, data: bytes, content_type: str) -> dict:
+    """Legacy sync API (kept for backward compat). Prefer aput_object in new async code."""
     key = init_storage()
     if not key:
         raise HTTPException(status_code=500, detail="Storage unavailable")
@@ -142,7 +145,6 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
         timeout=120,
     )
     if resp.status_code == 403:
-        # refresh key and retry once
         global storage_key
         storage_key = None
         key = init_storage()
@@ -154,6 +156,30 @@ def put_object(path: str, data: bytes, content_type: str) -> dict:
         )
     resp.raise_for_status()
     return resp.json()
+
+
+async def aput_object(path: str, data: bytes, content_type: str) -> dict:
+    """Async storage upload via httpx — non-blocking for FastAPI event loop."""
+    global storage_key
+    key = init_storage()
+    if not key:
+        raise HTTPException(status_code=500, detail="Storage unavailable")
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.put(
+            f"{STORAGE_URL}/objects/{path}",
+            headers={"X-Storage-Key": key, "Content-Type": content_type},
+            content=data,
+        )
+        if resp.status_code == 403:
+            storage_key = None
+            key = init_storage()
+            resp = await client.put(
+                f"{STORAGE_URL}/objects/{path}",
+                headers={"X-Storage-Key": key, "Content-Type": content_type},
+                content=data,
+            )
+        resp.raise_for_status()
+        return resp.json()
 
 
 def get_object(path: str):
@@ -178,6 +204,30 @@ def get_object(path: str):
         raise HTTPException(status_code=404, detail="File not found")
     resp.raise_for_status()
     return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+
+
+async def aget_object(path: str):
+    """Async storage download via httpx — non-blocking."""
+    global storage_key
+    key = init_storage()
+    if not key:
+        raise HTTPException(status_code=500, detail="Storage unavailable")
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.get(
+            f"{STORAGE_URL}/objects/{path}",
+            headers={"X-Storage-Key": key},
+        )
+        if resp.status_code == 403:
+            storage_key = None
+            key = init_storage()
+            resp = await client.get(
+                f"{STORAGE_URL}/objects/{path}",
+                headers={"X-Storage-Key": key},
+            )
+        if resp.status_code == 404:
+            raise HTTPException(status_code=404, detail="File not found")
+        resp.raise_for_status()
+        return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
 
 
 # ------------- Models -------------
@@ -304,6 +354,39 @@ class BusinessInfo(BaseModel):
     linkedin: str = ""
     twitter: str = ""
     youtube: str = ""
+    # SEO / analytics
+    google_analytics_id: str = ""  # e.g., G-XXXXXXX
+    google_search_console_verification: str = ""  # meta content only
+
+
+class ProjectIn(BaseModel):
+    title: str
+    description: str
+    location: str = ""
+    customer: str = ""
+    completion_date: str = ""
+    image_url: Optional[str] = None
+    order: int = 0
+    visible: bool = True
+
+
+class Project(ProjectIn):
+    id: str
+    created_at: str
+
+
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordIn(BaseModel):
+    token: str
+    new_password: str
+
+
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class NewsletterIn(BaseModel):
@@ -606,7 +689,7 @@ async def upload_gallery(
     media_type = "video" if content_type.startswith("video/") or ext in ("mp4", "mov", "webm") else "image"
     path = f"{APP_NAME}/gallery/{uuid.uuid4()}.{ext}"
     data = await file.read()
-    put_object(path, data, content_type)
+    await aput_object(path, data, content_type)
     item = {
         "id": str(uuid.uuid4()),
         "title": title,
@@ -638,13 +721,6 @@ async def delete_gallery(gid: str, admin=Depends(get_current_admin)):
     return {"ok": True}
 
 
-@api_router.get("/files/{file_path:path}")
-async def get_file(file_path: str):
-    """Public file serving for gallery/pickup media."""
-    data, content_type = get_object(file_path)
-    return Response(content=data, media_type=content_type)
-
-
 # ------------- Pickup Requests -------------
 @api_router.post("/pickup", response_model=PickupRequest)
 @limiter.limit("10/hour")
@@ -664,8 +740,15 @@ async def upload_pickup_media(file: UploadFile = File(...)):
     content_type = file.content_type or "application/octet-stream"
     path = f"{APP_NAME}/pickup/{uuid.uuid4()}.{ext}"
     data = await file.read()
-    put_object(path, data, content_type)
+    await aput_object(path, data, content_type)
     return {"path": path, "url": f"/api/files/{path}"}
+
+
+@api_router.get("/files/{file_path:path}")
+async def get_file(file_path: str):
+    """Public file serving for gallery/pickup media."""
+    data, content_type = await aget_object(file_path)
+    return Response(content=data, media_type=content_type)
 
 
 @api_router.get("/pickup", response_model=List[PickupRequest])
@@ -783,6 +866,205 @@ async def sitemap(request: Request):
         xml += f"  <url><loc>{base}{u}</loc><changefreq>daily</changefreq><priority>{1.0 if u == '/' else 0.7}</priority></url>\n"
     xml += "</urlset>"
     return Response(content=xml, media_type="application/xml")
+
+
+@api_router.post("/auth/forgot-password")
+@limiter.limit("5/hour")
+async def forgot_password(request: Request, body: ForgotPasswordIn):
+    email = body.email.lower().strip()
+    user = await db.users.find_one({"email": email})
+    # Always return ok (don't leak whether email exists)
+    if not user:
+        return {"ok": True, "message": "If the email exists, a reset link has been sent."}
+    token = secrets.token_urlsafe(32)
+    expires = datetime.now(timezone.utc) + timedelta(hours=1)
+    await db.password_reset_tokens.insert_one({
+        "token": token,
+        "email": email,
+        "expires_at": expires,
+        "used": False,
+        "created_at": now_iso(),
+    })
+    reset_link = f"{os.environ.get('PUBLIC_URL', '')}/reset-password?token={token}"
+    logger.info(f"[PASSWORD RESET] For {email} — link: {reset_link}")
+    return {"ok": True, "message": "If the email exists, a reset link has been sent.", "debug_link": reset_link}
+
+
+@api_router.post("/auth/reset-password")
+@limiter.limit("10/hour")
+async def reset_password(request: Request, body: ResetPasswordIn):
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    rec = await db.password_reset_tokens.find_one({"token": body.token, "used": False})
+    if not rec:
+        raise HTTPException(status_code=400, detail="Invalid or already-used token")
+    expires = rec["expires_at"]
+    if isinstance(expires, str):
+        expires = datetime.fromisoformat(expires)
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) > expires:
+        raise HTTPException(status_code=400, detail="Token expired")
+    await db.users.update_one(
+        {"email": rec["email"]},
+        {"$set": {"password_hash": hash_password(body.new_password)}},
+    )
+    await db.password_reset_tokens.update_one({"token": body.token}, {"$set": {"used": True}})
+    await db.login_attempts.delete_one({"_id": f"email:{rec['email']}"})
+    return {"ok": True}
+
+
+@api_router.post("/auth/change-password")
+async def change_password(body: ChangePasswordIn, admin=Depends(get_current_admin)):
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    user = await db.users.find_one({"email": admin["sub"]})
+    if not user or not verify_password(body.current_password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    await db.users.update_one(
+        {"email": admin["sub"]},
+        {"$set": {"password_hash": hash_password(body.new_password)}},
+    )
+    return {"ok": True}
+
+
+# ------------- Projects -------------
+@api_router.get("/projects", response_model=List[Project])
+async def list_projects(only_visible: bool = False):
+    q = {"visible": True} if only_visible else {}
+    docs = await db.projects.find(q, {"_id": 0}).sort("order", 1).to_list(1000)
+    return [Project(**d) for d in docs]
+
+
+@api_router.post("/projects", response_model=Project)
+async def create_project(body: ProjectIn, admin=Depends(get_current_admin)):
+    doc = body.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    doc["created_at"] = now_iso()
+    await db.projects.insert_one(doc)
+    doc.pop("_id", None)
+    return Project(**doc)
+
+
+@api_router.put("/projects/{pid}", response_model=Project)
+async def update_project(pid: str, body: ProjectIn, admin=Depends(get_current_admin)):
+    await db.projects.update_one({"id": pid}, {"$set": body.model_dump()})
+    doc = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Not found")
+    return Project(**doc)
+
+
+@api_router.delete("/projects/{pid}")
+async def delete_project(pid: str, admin=Depends(get_current_admin)):
+    await db.projects.delete_one({"id": pid})
+    return {"ok": True}
+
+
+# ------------- Company Brochure PDF -------------
+@api_router.get("/brochure.pdf")
+async def brochure_pdf():
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from html import escape
+
+    info_doc = await db.business_info.find_one({"_id": "singleton"}) or {}
+    services = await db.services.find({"visible": True}, {"_id": 0}).sort("order", 1).to_list(200)
+    prices = await db.prices.find({"visible": True}, {"_id": 0}).sort("category", 1).to_list(200)
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=18*mm, rightMargin=18*mm, topMargin=20*mm, bottomMargin=18*mm,
+    )
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="Tag", fontSize=12, leading=15, textColor=colors.HexColor("#6b7280")))
+    styles.add(ParagraphStyle(name="Gold", fontSize=10, leading=13, textColor=colors.HexColor("#8a6f18"), fontName="Helvetica-Bold"))
+
+    def header(canvas, d):
+        canvas.saveState()
+        canvas.setFillColor(colors.HexColor("#060B14"))
+        canvas.rect(0, A4[1] - 16*mm, A4[0], 16*mm, fill=1, stroke=0)
+        canvas.setFillColor(colors.HexColor("#D4AF37"))
+        canvas.setFont("Helvetica-Bold", 12)
+        canvas.drawString(18*mm, A4[1] - 10*mm, info_doc.get("business_name", "NK Prestige Steel"))
+        canvas.setFillColor(colors.white)
+        canvas.setFont("Helvetica", 8)
+        canvas.drawRightString(A4[0] - 18*mm, A4[1] - 10*mm, f"GST: {info_doc.get('gst_number', '')}")
+        canvas.setFillColor(colors.HexColor("#94A3B8"))
+        canvas.setFont("Helvetica", 8)
+        canvas.drawRightString(A4[0] - 18*mm, 10*mm, f"Page {d.page}")
+        canvas.restoreState()
+
+    story = []
+    story.append(Paragraph(escape(info_doc.get("business_name", "NK Prestige Steel Corporation")), styles["Title"]))
+    story.append(Paragraph(escape(info_doc.get("tagline", "")), styles["Tag"]))
+    story.append(Spacer(1, 12))
+    story.append(Paragraph(escape(info_doc.get("subtitle", "")), styles["BodyText"]))
+    story.append(Spacer(1, 16))
+
+    # Services
+    story.append(Paragraph("What We Buy & Do", styles["Heading2"]))
+    svc_rows = []
+    for s in services[:24]:
+        svc_rows.append([f"• {escape(s.get('title', ''))}", escape((s.get('description') or '')[:80])])
+    if svc_rows:
+        t = Table(svc_rows, colWidths=[55*mm, 115*mm])
+        t.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#8a6f18")),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        story.append(t)
+    story.append(Spacer(1, 16))
+
+    # Prices
+    story.append(Paragraph("Today's Live Scrap Prices", styles["Heading2"]))
+    price_rows = [["Category", "Item", "Rate (₹/kg)"]]
+    for p in prices[:30]:
+        price_rows.append([
+            escape(p.get("category", "")),
+            escape(p.get("name", "")),
+            f"₹{p.get('price_per_kg', 0):,.2f}",
+        ])
+    pt = Table(price_rows, colWidths=[45*mm, 90*mm, 35*mm], repeatRows=1)
+    pt.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0A1128")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#D4AF37")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("ALIGN", (2, 1), (2, -1), "RIGHT"),
+        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    story.append(pt)
+    story.append(Spacer(1, 16))
+
+    # Contact
+    story.append(Paragraph("Contact & Locations", styles["Heading2"]))
+    all_phones = ", ".join([info_doc.get("phone", "")] + (info_doc.get("extra_phones") or []))
+    story.append(Paragraph(f"<b>Phone:</b> {escape(all_phones)}", styles["BodyText"]))
+    story.append(Paragraph(f"<b>WhatsApp:</b> {escape(info_doc.get('whatsapp', ''))}", styles["BodyText"]))
+    story.append(Paragraph(f"<b>Email:</b> {escape(info_doc.get('email', ''))}", styles["BodyText"]))
+    story.append(Paragraph(f"<b>Office:</b> {escape(info_doc.get('office_address', ''))}", styles["BodyText"]))
+    story.append(Paragraph(f"<b>Godown:</b> {escape(info_doc.get('godown_address', ''))}", styles["BodyText"]))
+    story.append(Paragraph(f"<b>Working Hours:</b> {escape(info_doc.get('working_hours', ''))}", styles["BodyText"]))
+
+    doc.build(story, onFirstPage=header, onLaterPages=header)
+    buf.seek(0)
+    pdf_bytes = buf.getvalue()
+
+    fname = f"NK-Prestige-Steel-Brochure-{datetime.now().strftime('%Y%m%d')}.pdf"
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 # ------------- Seed / Startup -------------
@@ -1047,6 +1329,10 @@ async def on_startup():
         await db.faqs.create_index("id", unique=True)
         await db.gallery.create_index("id", unique=True)
         await db.pickups.create_index("id", unique=True)
+        await db.projects.create_index("id", unique=True)
+        await db.password_reset_tokens.create_index("token", unique=True)
+        await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
+        await db.login_attempts.create_index("_id")
     except Exception as e:
         logger.warning(f"Index creation warning: {e}")
     await seed_data()

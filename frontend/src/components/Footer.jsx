@@ -122,9 +122,20 @@ export default function Footer({ info }) {
           <p className="text-xs text-[#94A3B8]">
             © {new Date().getFullYear()} {info.business_name}. All rights reserved.
           </p>
-          <p className="text-xs text-[#94A3B8]">
-            <Link to="/login" className="hover:text-[#D4AF37]" data-testid="footer-admin-link">Admin Login</Link>
-          </p>
+          <div className="flex items-center gap-5">
+            <a
+              href={`${process.env.REACT_APP_BACKEND_URL}/api/brochure.pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs uppercase tracking-widest text-[#D4AF37] hover:text-[#F0C420] flex items-center gap-1.5"
+              data-testid="download-brochure"
+            >
+              ↓ Download Brochure PDF
+            </a>
+            <p className="text-xs text-[#94A3B8]">
+              <Link to="/login" className="hover:text-[#D4AF37]" data-testid="footer-admin-link">Admin Login</Link>
+            </p>
+          </div>
         </div>
       </div>
     </footer>

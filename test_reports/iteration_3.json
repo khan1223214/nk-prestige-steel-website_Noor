@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 3 E2E for NK Prestige Steel. Backend: 14/14 new pytest tests PASS (brochure PDF %PDF magic + attachment + >3KB, Projects CRUD + only_visible + auth guard, forgot-password with debug_link and no-leak on unknown email, reset-password full flow with token single-use + short-password rejection, change-password wrong-current 401 + change/revert flow, BusinessInfo google_analytics_id + google_search_console_verification round-trip, /api/gallery/upload -> /api/files/{path} async storage roundtrip fast (<20s), robots.txt has Sitemap:, sitemap.xml has >=6 URLs and https:// canonical PUBLIC_URL). Regression: 31/34 legacy passed; 3 failures inherited from iter2 (tagline reverted by legacy test, gallery-seed check due to test artifact, pickup rate-limit due to k8s multi-IP ingress).\n\nFrontend: verified /manifest.json 200 application/json with short_name='NK Prestige Steel', /service-worker.js 200, index.html has <link rel='manifest'> + apple-touch-icon + theme-color=#060B14, title includes 'NK Prestige Steel'. Navbar Projects link present + /projects page renders projects/empty state. Footer 'DOWNLOAD BROCHURE PDF' link (data-testid='download-brochure') targets /api/brochure.pdf in new tab. /login has 'FORGOT PASSWORD?' link (data-testid='forgot-link') -> /forgot-password page (data-testid='forgot-email-input' + 'forgot-submit-btn') -> dev link block (data-testid='forgot-dev-link') renders with reset-password?token=... URL. /reset-password?token=... form (reset-password-input + reset-confirm-input testids) accepts new password and redirects to /login with success toast — verified end-to-end. Admin login works with restored NK@Prestige2026. Change Password sidebar tab shows change-password-form (data-testid='change-password-form') with 3 password inputs and UPDATE PASSWORD button. Business Info tab shows Google Analytics ID + GSC Verification inputs (labeled 'GOOGLE ANALYTICS ID (G-XXXXXXX)' and 'GSC VERIFICATION (META CONTENT)'). Admin Projects tab is present in sidebar. Admin password reset back to NK@Prestige2026 at end (verified).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "regression (iter2)", "issue": "Pickup rate-limit still not triggering — same k8s multi-source-IP root cause; not iter3 regression."},
+      {"endpoint": "regression (iter2)", "issue": "BusinessInfo tagline reverted by legacy backend_test.py to \"India's Trusted Scrap Recycling Partner\" which conflicts with rebrand default 'Premium Scrap Dealer & Metal Trading' — causes test_iteration2::test_extras_present intermittent fail depending on test order."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Admin.jsx tab buttons", "issue": "data-testid=\"admin-tab-projects\" and data-testid=\"admin-tab-security\" NOT present in DOM although UI sidebar items 'Projects' and 'Change Password' render and are clickable. Spec requested these testids.", "selector": "aside sidebar tab buttons", "priority": "MEDIUM"},
+      {"component": "Admin.jsx BusinessInfoTab", "issue": "data-testid=\"info-google_analytics_id\" and data-testid=\"info-google_search_console_verification\" NOT present on the GA/GSC inputs (labels 'GOOGLE ANALYTICS ID' and 'GSC VERIFICATION' render fine). Testing agents will fail to locate these fields by testid.", "selector": "inputs under Business Info tab", "priority": "MEDIUM"},
+      {"component": "ForgotPassword.jsx forgot-dev-link", "issue": "The dev-link element renders as a div (not <a>), so href attribute is None; the URL is inside the text content. Consider wrapping the reset-password URL in an <a href='...' data-testid='forgot-dev-link'> so click navigates in-app.", "selector": "[data-testid='forgot-dev-link']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Footer", "issues": ["Tagline still shows 'India's Trusted Scrap Recycling Partner' due to iter2 legacy test revert; rebrand target is 'Premium Scrap Dealer & Metal Trading'."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration3.py",
+    "/app/test_reports/pytest/iter3_results.xml"
+  ],
+  "action_items": [
+    "Add data-testid=\"admin-tab-projects\" and data-testid=\"admin-tab-security\" to the corresponding sidebar tab buttons in Admin.jsx (Projects + Change Password items).",
+    "Add data-testid=\"info-google_analytics_id\" and data-testid=\"info-google_search_console_verification\" to the two new inputs in BusinessInfoTab (GA ID and GSC verification).",
+    "(nice-to-have) In ForgotPassword.jsx, render the dev reset link as an actual <a href={debug_link} data-testid='forgot-dev-link'> so it's clickable and has an href attribute.",
+    "(carry-over from iter2) Fix backend_test.py::TestBusinessInfo::test_update_business_info to revert to 'Premium Scrap Dealer & Metal Trading' instead of legacy 'India's Trusted Scrap Recycling Partner' — currently keeps rebrand out-of-sync.",
+    "(carry-over from iter2) Fix rate-limit key_func to use X-Forwarded-For so slowapi + brute-force lockout work behind k8s ingress."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 1361 lines (still growing) — should be split into routers/models/services (>700 loc guideline).",
+    "aput_object/aget_object correctly use httpx AsyncClient — the previous iter2 finding about sync requests in async endpoints is FIXED for gallery + pickup uploads and /api/files.",
+    "reportlab brochure generation is done synchronously inside an async endpoint (build_brochure_pdf() blocks the event loop for the duration). For low traffic it's fine, but consider running in a threadpool via asyncio.to_thread() for scalability.",
+    "password_reset_tokens collection: verified token single-use (used=true) enforcement. Consider also adding an explicit `expires_at` TTL index in Mongo for automatic cleanup.",
+    "/api/auth/forgot-password returns debug_link in prod-shaped response — clearly labeled dev-only in UI, but this endpoint should hide debug_link when EMAIL provider is configured; currently it will always leak the link.",
+    "New BusinessInfo fields (google_analytics_id, google_search_console_verification) have no server-side format validation (e.g., regex ^G-[A-Z0-9]+$). Frontend lib/analytics.jsx validates client-side only."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration3.py (new)",
+    "/app/test_reports/pytest/iter3_results.xml (new)"
+  ],
+  "success_rate": {"backend": "100% (14/14 iter3 tests); 31/34 legacy+iter2 (3 known iter2 fails carried over)", "frontend": "~90% (all functionality works; 4 requested data-testids missing on admin tabs + GA/GSC inputs)"},
+  "test_credentials": "admin@nkprestigesteel.com / NK@Prestige2026 (verified working at end of run — reset multiple times during tests, all reverted)",
+  "seed_data_creation": "None persisted. Cleaned up: gallery upload item created during async-storage test (deleted), 'BMTC Dismantling Test' project (deleted via API), GA/GSC test values cleared, admin password reverted to NK@Prestige2026 twice (once via reset-password, once via change-password).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter3 test file: /app/backend/tests/test_iteration3.py. Run: cd /app && python -m pytest backend/tests/test_iteration3.py -o addopts='' -v. All 14 pass on clean state. Key testids present: forgot-link, forgot-email-input, forgot-submit-btn, forgot-dev-link, reset-password-input, reset-confirm-input, change-password-form, download-brochure. Key testids MISSING (main agent to add): admin-tab-projects, admin-tab-security, info-google_analytics_id, info-google_search_console_verification. Password reset flow is fully functional end-to-end via UI. Admin password is guaranteed reset to NK@Prestige2026 at end of this run.",
+  "rca_of_the_issue": "Missing data-testids: main agent implemented the UI features (Projects tab, Change Password tab, GA ID + GSC verification inputs) but did not add the exact data-testid strings requested by the spec on those elements. Only change-password-form has its testid. Adding these attributes is a 5-line change in Admin.jsx."
+}

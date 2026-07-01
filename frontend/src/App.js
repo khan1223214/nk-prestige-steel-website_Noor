@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import { AuthProvider } from "./lib/auth";
 import { I18nProvider } from "./lib/i18n";
 import { api } from "./lib/api";
+import { useAnalytics } from "./lib/analytics";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import FloatingContactBar from "./components/FloatingContactBar";
@@ -14,14 +15,21 @@ import Home from "./pages/Home";
 import Prices from "./pages/Prices";
 import Services from "./pages/Services";
 import Gallery from "./pages/Gallery";
+import Projects from "./pages/Projects";
 import Pickup from "./pages/Pickup";
 import Contact from "./pages/Contact";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Admin from "./pages/Admin";
 
 function Layout({ info, children }) {
   const { pathname } = useLocation();
-  const isAdminArea = pathname.startsWith("/admin") || pathname.startsWith("/login");
+  const isAdminArea =
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/forgot-password") ||
+    pathname.startsWith("/reset-password");
   return (
     <>
       {!isAdminArea && <Navbar />}
@@ -36,6 +44,7 @@ function Layout({ info, children }) {
 function AppInner() {
   const [info, setInfo] = useState(null);
   const [ready, setReady] = useState(false);
+  useAnalytics(info);
 
   useEffect(() => {
     api.get("/business-info")
@@ -55,9 +64,12 @@ function AppInner() {
         <Route path="/prices" element={<Prices />} />
         <Route path="/services" element={<Services />} />
         <Route path="/gallery" element={<Gallery />} />
+        <Route path="/projects" element={<Projects />} />
         <Route path="/pickup" element={<Pickup info={info} />} />
         <Route path="/contact" element={<Contact info={info} />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/admin" element={<Admin />} />
       </Routes>
     </Layout>

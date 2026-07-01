@@ -4,18 +4,20 @@ import { useAuth } from "../lib/auth";
 import { api, BACKEND_URL } from "../lib/api";
 import { toast } from "sonner";
 import {
-  SignOut, CurrencyInr, Wrench, Images, ChatCircleDots, Question, Buildings, Truck,
-  PencilSimple, Trash, Plus, UploadSimple, DownloadSimple, X, Check, ArrowSquareOut,
+  SignOut, CurrencyInr, Wrench, Images, ChatCircleDots, Question, Buildings, Truck, Briefcase,
+  PencilSimple, Trash, Plus, UploadSimple, DownloadSimple, X, Check, ArrowSquareOut, Key,
 } from "@phosphor-icons/react";
 
 const TABS = [
   { key: "info", label: "Business Info", icon: <Buildings size={16} /> },
   { key: "prices", label: "Scrap Prices", icon: <CurrencyInr size={16} /> },
   { key: "services", label: "Services", icon: <Wrench size={16} /> },
+  { key: "projects", label: "Projects", icon: <Briefcase size={16} /> },
   { key: "gallery", label: "Gallery", icon: <Images size={16} /> },
   { key: "testimonials", label: "Testimonials", icon: <ChatCircleDots size={16} /> },
   { key: "faqs", label: "FAQ", icon: <Question size={16} /> },
   { key: "pickups", label: "Pickup Requests", icon: <Truck size={16} /> },
+  { key: "security", label: "Change Password", icon: <Key size={16} /> },
 ];
 
 export default function Admin() {
@@ -93,10 +95,12 @@ export default function Admin() {
           {tab === "info" && <BusinessInfoTab />}
           {tab === "prices" && <PricesTab />}
           {tab === "services" && <ServicesTab />}
+          {tab === "projects" && <ProjectsTab />}
           {tab === "gallery" && <GalleryTab />}
           {tab === "testimonials" && <TestimonialsTab />}
           {tab === "faqs" && <FaqsTab />}
           {tab === "pickups" && <PickupsTab />}
+          {tab === "security" && <SecurityTab />}
         </div>
       </main>
     </div>
@@ -158,6 +162,8 @@ function BusinessInfoTab() {
     ["office_address", "Office Address"], ["godown_address", "Godown Address"],
     ["facebook", "Facebook URL"], ["instagram", "Instagram URL"], ["linkedin", "LinkedIn URL"],
     ["twitter", "Twitter URL"], ["youtube", "YouTube URL"],
+    ["google_analytics_id", "Google Analytics ID (G-XXXXXXX)"],
+    ["google_search_console_verification", "GSC Verification (meta content)"],
   ];
 
   const ListEditor = ({ label, k, placeholder }) => (
@@ -451,6 +457,88 @@ function ServicesTab() {
       blank={{ title: "", description: "", icon: "Wrench", image_url: "", order: 0, visible: true }}
       testidPrefix="service"
     />
+  );
+}
+
+// -------------------- Projects --------------------
+function ProjectsTab() {
+  return (
+    <CrudSection
+      title="Completed Projects"
+      subtitle="Signature case studies shown on the /projects page."
+      endpoint="/projects"
+      fields={[
+        { key: "title", label: "Project Title" },
+        { key: "description", label: "Description", textarea: true },
+        { key: "location", label: "Location" },
+        { key: "customer", label: "Customer / Client" },
+        { key: "completion_date", label: "Completion Date (e.g., Mar 2026)" },
+        { key: "image_url", label: "Cover Image URL (public link)" },
+        { key: "order", label: "Order", type: "number" },
+        { key: "visible", label: "Visible", type: "boolean" },
+      ]}
+      display={(p) => ({ primary: p.title, secondary: p.description, meta: [p.customer, p.location, p.completion_date].filter(Boolean).join(" · ") })}
+      blank={{ title: "", description: "", location: "", customer: "", completion_date: "", image_url: "", order: 0, visible: true }}
+      testidPrefix="project"
+    />
+  );
+}
+
+// -------------------- Security / Change Password --------------------
+function SecurityTab() {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (next.length < 8) {
+      toast.error("New password must be at least 8 characters");
+      return;
+    }
+    if (next !== confirm) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.post("/auth/change-password", { current_password: current, new_password: next });
+      toast.success("Password updated. Please sign in again next time.");
+      setCurrent(""); setNext(""); setConfirm("");
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Change failed");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="max-w-lg">
+      <SectionHeader title="Change Password" subtitle="Rotate your admin password regularly." />
+      <form onSubmit={submit} className="glass-card sharp p-6 space-y-4" data-testid="change-password-form">
+        <label className="block">
+          <span className="block text-xs uppercase tracking-widest text-[#94A3B8] mb-2">Current Password</span>
+          <input type="password" required value={current} onChange={(e) => setCurrent(e.target.value)}
+            className="w-full bg-[#060B14] border border-white/10 text-white px-4 py-3 sharp focus:border-[#D4AF37] outline-none text-sm"
+            data-testid="change-password-current" />
+        </label>
+        <label className="block">
+          <span className="block text-xs uppercase tracking-widest text-[#94A3B8] mb-2">New Password (min 8 chars)</span>
+          <input type="password" required value={next} onChange={(e) => setNext(e.target.value)}
+            className="w-full bg-[#060B14] border border-white/10 text-white px-4 py-3 sharp focus:border-[#D4AF37] outline-none text-sm"
+            data-testid="change-password-new" />
+        </label>
+        <label className="block">
+          <span className="block text-xs uppercase tracking-widest text-[#94A3B8] mb-2">Confirm New Password</span>
+          <input type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)}
+            className="w-full bg-[#060B14] border border-white/10 text-white px-4 py-3 sharp focus:border-[#D4AF37] outline-none text-sm"
+            data-testid="change-password-confirm" />
+        </label>
+        <button disabled={busy} className="btn-primary sharp text-xs" data-testid="change-password-submit">
+          <Check size={14} weight="bold" /> {busy ? "Saving…" : "Update Password"}
+        </button>
+      </form>
+    </div>
   );
 }
 
