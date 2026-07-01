@@ -1,12 +1,13 @@
 # NK Prestige Steel Corporation — Product Requirements Doc
 
 ## Original Problem Statement
-World-class premium website for NK Prestige Steel Corporation (scrap recycling business, Karnataka, India). Fortune-500 industrial design aesthetic (dark navy blue + steel grey + gold accent, glassmorphism, Three.js 3D). Fully responsive, SEO-optimized, mobile-friendly, production-ready. React + FastAPI + MongoDB. Easy to deploy on Hostinger with custom domain.
+World-class premium website for NK Prestige Steel Corporation (scrap dealer, Karnataka, India). Fortune-500 industrial design (dark navy blue + steel grey + gold accent, glassmorphism, Three.js 3D). Fully responsive, SEO-optimized, mobile-friendly, production-ready. React + FastAPI + MongoDB. Deployable on Hostinger with custom domain.
 
 ## Company Info
 - Business: **NK Prestige Steel Corporation**
 - GST: `29KZRPK1994P1ZV`
-- Phone / WhatsApp: `+91 9741309869`
+- Primary Phone / WhatsApp: `+91 9741309869`
+- Additional Phone / WhatsApp: `+91 8310064128` (extra_phones / extra_whatsapps)
 - Email: `nkprestigesteel@gmail.com`
 - Office: Troop Lane Main Road, Near Jai Bheem Circle, Ramanagara – 562159, Karnataka
 - Godown: 278/1 Near Kannamangaladoddi, Close to State Highway 275, Ramanagara – 562159, Karnataka
@@ -15,60 +16,65 @@ World-class premium website for NK Prestige Steel Corporation (scrap recycling b
 - Email: `admin@nkprestigesteel.com`
 - Password: `NK@Prestige2026`
 
+## Brand / Copy
+- Hero H1: **Karnataka's Premium Scrap Dealer**
+- Tagline: **Premium Scrap Dealer & Metal Trading**
+- Stats: **400+ Happy Clients · 5+ Years Experience · 40+ Pickup Locations** (Tonnes-Recycled removed)
+
 ## Architecture
-- **Backend**: FastAPI (Motor / MongoDB), JWT bearer auth, Emergent object storage for images/videos, CSV/Excel import-export with pandas/openpyxl.
-- **Frontend**: React 19 + React Router 7 + Tailwind + Shadcn UI + @react-three/fiber v9 + @react-three/drei + framer-motion + react-fast-marquee + Phosphor Icons.
-- **DB collections**: users, business_info (singleton), prices, services, testimonials, faqs, gallery, pickups, newsletter, login_attempts.
+- **Backend**: FastAPI + Motor (MongoDB), JWT bearer auth, Emergent object storage, emergentintegrations LLM (`openai gpt-5.4-mini`), slowapi rate limiting, brute-force lockout (email-keyed, 5 fails → 15 min).
+- **Frontend**: React 19 + Router 7 + Tailwind + Shadcn UI + @react-three/fiber v9 + framer-motion + react-fast-marquee + Phosphor Icons + custom i18n (EN + KN).
+- **SEO**: React 19 native `<title>`/`<meta>` hoisting via `<Seo />`; sitemap.xml + robots.txt (both `/api/…` and static in `/public`); LocalBusiness JSON-LD on Home; `PUBLIC_URL` env var for canonical https base.
+- **DB**: users, business_info (singleton with extra_phones/whatsapps/emails + additional_addresses), prices, services, testimonials, faqs, gallery (with demo Unsplash/Pexels URLs seeded), pickups, newsletter, login_attempts, settings (seed version).
 
-## User Personas
-1. **Prospective scrap seller** — checks live prices, calls or WhatsApps the owner, submits a pickup request with photos.
-2. **Corporate/factory client** — reviews services, reads testimonials, downloads GST invoice details, contacts sales.
-3. **Admin (owner)** — logs in, updates daily scrap prices, uploads gallery photos, manages pickup requests, edits company info without touching code.
+## Implemented Features
+### Iteration 1 (MVP)
+- ✅ Fortune-500 dark navy + gold theme; Three.js hero (gold ingot + orbiting shards + truck chassis)
+- ✅ Live scrap prices (30 items), search/filter/sort/auto-refresh, printable, scrolling ticker
+- ✅ 35 services with cards & search
+- ✅ Gallery masonry + lightbox
+- ✅ Pickup request form with media upload (object storage)
+- ✅ Contact page with office + godown addresses, Google Maps embed
+- ✅ Floating contact bar (Call/WhatsApp/Email/Maps/Back-to-Top)
+- ✅ Newsletter, JWT admin login, Admin CMS (7 tabs incl. Business Info, Prices, Services, Gallery, Testimonials, FAQ, Pickups)
+- ✅ CSV / Excel import-export for prices
 
-## Implemented Features (Iteration 1 — 2026-07-01)
-- ✅ Hero with 3D scene (gold ingot + orbiting metal shards + truck chassis silhouette + particle field)
-- ✅ Animated stat counters (rAF), fade-in transitions (framer-motion)
-- ✅ Scrolling live price ticker (react-fast-marquee) with trend arrows
-- ✅ Live scrap prices page — 30 seeded prices, search, category filter, sort, auto-refresh, printable list
-- ✅ Services page — 35 seeded services with search
-- ✅ Gallery — masonry layout, category filter, lightbox modal (fallback demo images when empty)
-- ✅ Pickup request form — media upload (image/video) to Emergent object storage
-- ✅ Contact page — dual addresses (office + godown), Google Maps embed
-- ✅ Floating contact bar — one-click Call / WhatsApp / Email / Maps / Back-to-top (hidden on admin/login)
-- ✅ Newsletter signup in footer
-- ✅ JWT admin login + Admin CMS dashboard (Business Info, Prices, Services, Gallery, Testimonials, FAQ, Pickup Requests)
-- ✅ CSV export + CSV/Excel import for scrap prices
-- ✅ Idempotent admin + seed data on startup
-- ✅ Fortune-500 dark navy + gold theme, Clash Display + Manrope typography, glassmorphism, hover glow, sharp edges, industrial grid background
-- ✅ Fully responsive (mobile + tablet + desktop)
-- ✅ 100% backend test pass (24/24), 100% frontend flows verified
+### Iteration 2 (P1) — 2026-07-01
+- ✅ Updated all scrap prices to **Jan 2026 rates** via idempotent v2 migration
+- ✅ Seeded 8 demo gallery items (Unsplash/Pexels)
+- ✅ **Multiple contact numbers/addresses/emails** (extra_phones, extra_whatsapps, extra_emails, additional_addresses arrays)
+- ✅ Added `+91 8310064128` as extra phone/WhatsApp; Admin can add/remove any of them via new Business Info editors
+- ✅ **Multi-language toggle (EN / KN Kannada)** with `<I18nProvider>` + navbar `<Translate>` button, persists in localStorage
+- ✅ **AI Chat / Instant Quote assistant** — floating widget above contact bar, uses Emergent LLM key (openai gpt-5.4-mini). System prompt injects live scrap prices + business info; multi-turn session persistence via `session_id`
+- ✅ **SEO**: `<Seo />` component per route (title / description / OG / Twitter / canonical / robots), `<LocalBusinessSchema />` JSON-LD on Home, `/robots.txt` (via `/api` + static), `/sitemap.xml` (via `/api` + static) with `PUBLIC_URL` canonical https base
+- ✅ **Brute-force lockout** — 5 wrong passwords per email → 15-min lockout, keyed by email (IP-rotation-safe)
+- ✅ **Rate limits (slowapi + X-Forwarded-For real client IP)**: login 10/min, newsletter 5/hour, pickup 10/hour, ai chat 20/min
+- ✅ Rebrand: "India's Trusted" removed; hero shows **"Karnataka's Premium Scrap Dealer"**; all "scrap recycler/recycling" → "scrap dealer"; stats reduced to 3 (Happy Clients / Years / Locations)
+- ✅ Admin Gallery correctly renders both uploaded and URL-based items
 
 ## Backlog / Deferred
-### P1 (next iteration)
-- Multi-language toggle EN / KN (i18n)
-- AI Chat Assistant + Instant Quote Assistant (Emergent LLM key)
-- PWA — installable mobile app
-- SEO meta / OG tags per page + sitemap.xml + robots.txt + schema.org LocalBusiness
-- Google Analytics + Search Console integration
+### P1 (next)
+- PWA — installable mobile app + service worker + offline shell
+- Google Analytics + Search Console verification
 - Voice search + smart search
-- Before/After image comparison slider in gallery
-- Projects section (with location, customer, date)
-- Backup / Restore + Export/Import full DB from admin
-- Password reset flow + brute-force lockout on login (5 attempts / 15 min)
-- Rate limiting on public endpoints
-- Migrate `requests` (sync) to `httpx` (async) for object storage to avoid event-loop blocking
+- Before/After image slider in gallery
+- Projects section (with location, customer, completion date)
+- Backup / Restore / full DB Export-Import from admin
+- Password reset flow
+- Downloadable company brochure (PDF generator)
+- Native "Share Website" via Web Share API + print scrap price list refinements
 
 ### P2
-- Downloadable company brochure (PDF)
-- Share website (native share API)
-- Print scrap price list styling refinements
-- Google Reviews embed
-- Live news / market updates block on homepage
-- Admin-driven color/theme editor
+- Migrate object storage IO from sync `requests` → `httpx.AsyncClient`
+- Split server.py (~1080 lines) into routers/models/seed modules
+- Global IP-based enumeration backoff on top of per-email lockout
+- Google Reviews embed / live news block on home
 
-## Deployment
-- Backend: uvicorn on port 8001 (supervisor-managed)
-- Frontend: craco start on port 3000 (supervisor-managed)
-- MongoDB local via `MONGO_URL`
-- Object storage: Emergent (via `EMERGENT_LLM_KEY`)
-- To deploy on Hostinger: build React (`yarn build`), serve `build/` statically, run FastAPI behind a reverse proxy (nginx), point MongoDB to a hosted cluster.
+## Deployment (Hostinger)
+1. `cd frontend && yarn build` → serve `build/` via Hostinger static hosting or nginx
+2. Deploy FastAPI (`uvicorn server:app --host 0.0.0.0 --port 8001`) on a VPS or Hostinger Cloud
+3. Hosted MongoDB (Atlas) → `MONGO_URL`
+4. Set `EMERGENT_LLM_KEY` for object storage + AI chat
+5. Set `PUBLIC_URL="https://your-domain.com"` for canonical sitemap URLs
+6. Update `REACT_APP_BACKEND_URL` and rebuild frontend
+7. Point domain `A`/`CNAME` at Hostinger; make sure ingress passes `X-Forwarded-For` header for correct rate limiting

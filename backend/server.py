@@ -22,7 +22,19 @@ import pandas as pd
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+
+def _real_client_ip(request):
+    """Return real client IP behind k8s ingress / proxies (X-Forwarded-For first)."""
+    xff = request.headers.get("x-forwarded-for") or request.headers.get("x-real-ip")
+    if xff:
+        return xff.split(",")[0].strip()
+    try:
+        return get_remote_address(request)
+    except Exception:
+        return "unknown"
 
 # ------------- Config -------------
 mongo_url = os.environ['MONGO_URL']
@@ -42,9 +54,10 @@ db = client[DB_NAME]
 app = FastAPI(title="NK Prestige Steel API")
 api_router = APIRouter(prefix="/api")
 
-# Rate limiter
-limiter = Limiter(key_func=get_remote_address)
+# Rate limiter — behind k8s ingress: use X-Forwarded-For as client key
+limiter = Limiter(key_func=_real_client_ip)
 app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -299,10 +312,7 @@ class NewsletterIn(BaseModel):
 
 # ------------- Auth Routes -------------
 def _client_ip(request: Request) -> str:
-    try:
-        return get_remote_address(request)
-    except Exception:
-        return "unknown"
+    return _real_client_ip(request)
 
 
 async def _check_lockout(identifier: str):
@@ -336,7 +346,8 @@ async def _clear_attempts(identifier: str):
 @limiter.limit("10/minute")
 async def login(request: Request, body: LoginIn):
     email = body.email.lower().strip()
-    identifier = f"{_client_ip(request)}:{email}"
+    # Key lockout by email only (per-account) so IP rotation doesn't bypass.
+    identifier = f"email:{email}"
     await _check_lockout(identifier)
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(body.password, user["password_hash"]):
@@ -762,7 +773,10 @@ Sitemap: /api/sitemap.xml
 
 @api_router.get("/sitemap.xml")
 async def sitemap(request: Request):
-    base = str(request.base_url).rstrip("/").replace("/api", "")
+    # Prefer PUBLIC_URL env var (canonical https), fallback to request base_url
+    base = os.environ.get("PUBLIC_URL", "").rstrip("/")
+    if not base:
+        base = str(request.base_url).rstrip("/").replace("/api", "")
     urls = ["/", "/prices", "/services", "/gallery", "/pickup", "/contact"]
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     for u in urls:
