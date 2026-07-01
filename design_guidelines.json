@@ -1,0 +1,136 @@
+{
+  "theme_and_archetype": {
+    "domain": "Industrial / Corporate Scrap Recycling",
+    "theme": "Dark",
+    "archetype": "5 (Luxury)",
+    "description": "Premium, authoritative, and cinematic. Elevates scrap recycling to a Fortune-500 asset management level. Uses Deep Navy Blue, Steel Grey, and Gold accents."
+  },
+  "colors": {
+    "background": {
+      "primary": "#060B14",
+      "secondary": "#0A1128",
+      "surface": "#141A2E",
+      "glass": "rgba(10, 17, 40, 0.7)"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#94A3B8",
+      "accent": "#D4AF37",
+      "inverse": "#060B14"
+    },
+    "border": {
+      "default": "rgba(255, 255, 255, 0.08)",
+      "focus": "#D4AF37",
+      "glass": "rgba(255, 255, 255, 0.15)"
+    },
+    "accents": {
+      "gold_primary": "#D4AF37",
+      "gold_hover": "#F0C420",
+      "steel_grey": "#2C303A",
+      "success_green": "#10B981",
+      "danger_red": "#EF4444"
+    }
+  },
+  "typography": {
+    "heading_font": "Clash Display",
+    "body_font": "Manrope",
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tighter leading-tight",
+      "h2": "text-3xl sm:text-4xl font-medium tracking-tight",
+      "h3": "text-xl sm:text-2xl font-medium",
+      "h4": "text-lg sm:text-xl font-medium",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm tracking-wide",
+      "overline": "text-xs font-bold uppercase tracking-[0.2em]"
+    }
+  },
+  "spacing_and_layout": {
+    "section_padding": "py-24 sm:py-32",
+    "container_max_width": "max-w-7xl mx-auto px-6 lg:px-8",
+    "bento_grid": "grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-8",
+    "card_padding": "p-6 sm:p-8"
+  },
+  "surfaces_and_shadows": {
+    "glass_header": "bg-[#0A1128]/70 backdrop-blur-2xl border-b border-white/10 shadow-sm",
+    "glass_card": "bg-white/[0.03] backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)]",
+    "solid_card": "bg-[#141A2E] border border-white/5",
+    "glow_effect": "drop-shadow-[0_0_15px_rgba(212,175,55,0.4)]"
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#D4AF37] text-[#060B14] font-semibold px-8 py-4 rounded-none hover:bg-[#F0C420] transition-colors duration-300",
+      "secondary": "bg-transparent text-[#D4AF37] border border-[#D4AF37]/50 px-8 py-4 rounded-none hover:bg-[#D4AF37]/10 transition-all duration-300",
+      "glass": "bg-white/5 backdrop-blur-md border border-white/10 text-white px-6 py-3 rounded-none hover:bg-white/10 transition-colors"
+    },
+    "tables": {
+      "live_prices": "w-full text-left border-collapse",
+      "header": "text-sm font-semibold text-gray-400 uppercase tracking-wider border-b border-white/10 pb-4",
+      "row": "border-b border-white/5 hover:bg-white/[0.02] transition-colors",
+      "cell": "py-4 text-base text-white"
+    },
+    "inputs": {
+      "default": "w-full bg-[#060B14] border border-white/10 text-white px-4 py-3 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none transition-all rounded-none",
+      "label": "block text-sm font-medium text-gray-400 mb-2"
+    }
+  },
+  "interactive_and_motion": {
+    "scroll": "Lenis smooth scrolling for premium momentum",
+    "hover_effects": "Cards subtly translate-y-[-4px] with gold border illumination",
+    "page_transitions": "Fade-in with slight upward Y translation using Framer Motion",
+    "three_js_hero": "Interactive 3D model of a luxury industrial truck on dark background with directional gold and blue ambient lighting. Mouse orbit enabled. If truck model unavailable, use abstract industrial 3D metal shards.",
+    "tickers": "Continuous horizontal scroll for Live Market Price updates using react-fast-marquee. Low opacity background, gold text."
+  },
+  "icons_and_assets": {
+    "icon_library": "@phosphor-icons/react",
+    "media_urls": [
+      {
+        "category": "hero_background",
+        "url": "https://images.pexels.com/photos/36095234/pexels-photo-36095234.jpeg",
+        "description": "Industrial steel diamond plate texture. Use with heavy #060B14 overlay."
+      },
+      {
+        "category": "gallery_scrap_yard",
+        "url": "https://images.unsplash.com/photo-1770068511830-a6cc498f4bfe",
+        "description": "Aerial view of scrap yard, use in gallery or services."
+      },
+      {
+        "category": "gallery_engines",
+        "url": "https://images.unsplash.com/photo-1767340078189-4258fbb7bd7c",
+        "description": "Pile of old car engines, use in services or gallery."
+      },
+      {
+        "category": "office_corporate",
+        "url": "https://images.pexels.com/photos/35058546/pexels-photo-35058546.jpeg",
+        "description": "Luxury corporate office, use for 'About Us' or 'Contact' section."
+      },
+      {
+        "category": "office_building",
+        "url": "https://images.pexels.com/photos/32770255/pexels-photo-32770255.jpeg",
+        "description": "Modern corporate building facade, use for Contact/Godown."
+      }
+    ]
+  },
+  "specific_section_rules": {
+    "hero": "Must include Three.js canvas as background/right-side element. H1 text: 'India's Trusted Scrap Recycling Partner'. Subtext: 'We Buy All Types of Scrap at the Best Market Price'. Buttons grouped left-aligned.",
+    "ticker": "Sticky directly under hero or bottom of screen. Shows 'COPPER: ₹700/kg (UP) | ALUMINIUM: ₹150/kg (DOWN)'.",
+    "live_price_table": "Search bar top right. Columns: Category, Scrap Type, Previous Price, Today's Price, Trend (Green Up Arrow / Red Down Arrow).",
+    "services_grid": "30+ items represented efficiently (use a Bento grid for top categories, plus a 'View All' or horizontal scroll). Each card has an icon, title, short desc. Hover makes it glow gold.",
+    "pickup_form": "Multi-step or clean single column. Must include file upload for photo/video. Shadcn UI form components customized to dark theme.",
+    "gallery": "Masonry layout. Use Framer Motion for entrance. 3D tilt effect on hover for images.",
+    "contact_bar": "Fixed floating bar at bottom or side. Icons for Call, WhatsApp, Email, Maps, Back to top, Dark Mode.",
+    "dashboard": "Admin CMS dashboard. Use Shadcn sidebar, data tables, and card components. Secure JWT login.",
+    "language_ai": "Multi-language toggle (EN/KN) in header. AI Chat widget floating at bottom right (above contact bar)."
+  },
+  "testing": {
+    "attributes": "All interactive elements MUST include data-testid. Example: data-testid='hero-cta-quote', data-testid='price-table-search'."
+  },
+  "instructions_to_main_agent": [
+    "Install dependencies: framer-motion, @react-three/fiber, @react-three/drei, three, gsap, @studio-freight/lenis, @phosphor-icons/react, react-fast-marquee.",
+    "Configure Tailwind with the provided #060B14 dark navy and #D4AF37 gold palette.",
+    "Implement pure HTML/Tailwind for marketing layouts (Hero, Bento grids) to allow maximum creative freedom.",
+    "Implement Shadcn UI for structured components (Tables, Forms, Dashboard), customized heavily to match the Luxury Dark theme.",
+    "Include a <Canvas> element in the Hero for the 3D visual. Use @react-three/fiber.",
+    "Implement the live price ticker using react-fast-marquee.",
+    "Ensure dark mode toggle is functional, though Dark is the default premium state."
+  ]
+}
