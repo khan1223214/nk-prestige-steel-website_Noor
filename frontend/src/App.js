@@ -3,11 +3,13 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider } from "./lib/auth";
+import { I18nProvider } from "./lib/i18n";
 import { api } from "./lib/api";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import FloatingContactBar from "./components/FloatingContactBar";
 import LoadingScreen from "./components/LoadingScreen";
+import AiChatWidget from "./components/AiChatWidget";
 import Home from "./pages/Home";
 import Prices from "./pages/Prices";
 import Services from "./pages/Services";
@@ -26,6 +28,7 @@ function Layout({ info, children }) {
       {children}
       {!isAdminArea && <Footer info={info} />}
       {!isAdminArea && <FloatingContactBar info={info} />}
+      {!isAdminArea && <AiChatWidget />}
     </>
   );
 }
@@ -39,7 +42,6 @@ function AppInner() {
       .then((r) => setInfo(r.data))
       .catch(() => setInfo({}))
       .finally(() => {
-        // hold the loader briefly for polish
         setTimeout(() => setReady(true), 500);
       });
   }, []);
@@ -66,12 +68,14 @@ function App() {
   return (
     <div className="App">
       <BrowserRouter>
-        <AuthProvider>
-          <AppInner />
-          <Toaster position="top-right" theme="dark" toastOptions={{
-            style: { background: "#141A2E", color: "#fff", border: "1px solid rgba(212,175,55,0.3)", borderRadius: 0 },
-          }} />
-        </AuthProvider>
+        <I18nProvider>
+          <AuthProvider>
+            <AppInner />
+            <Toaster position="top-right" theme="dark" toastOptions={{
+              style: { background: "#141A2E", color: "#fff", border: "1px solid rgba(212,175,55,0.3)", borderRadius: 0 },
+            }} />
+          </AuthProvider>
+        </I18nProvider>
       </BrowserRouter>
     </div>
   );

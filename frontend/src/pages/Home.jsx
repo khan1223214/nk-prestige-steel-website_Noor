@@ -3,19 +3,21 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Phone, WhatsappLogo, CurrencyInr, Images, Truck, MapPin, ArrowRight, Sparkle, ShieldCheck, Handshake, Recycle, Star } from "@phosphor-icons/react";
 import { api } from "../lib/api";
+import { useI18n } from "../lib/i18n";
 import Counter from "../components/Counter";
 import PriceTicker from "../components/PriceTicker";
+import Seo, { LocalBusinessSchema } from "../components/Seo";
 
 const Hero3D = lazy(() => import("../components/Hero3D"));
 
 const stats = [
-  { label: "Tonnes Recycled", value: 12500, suffix: "+" },
-  { label: "Happy Clients", value: 850, suffix: "+" },
-  { label: "Years Experience", value: 15, suffix: "+" },
-  { label: "Pickup Locations", value: 40, suffix: "+" },
+  { key: "clients", label: "Happy Clients", value: 400, suffix: "+" },
+  { key: "years", label: "Years Experience", value: 5, suffix: "+" },
+  { key: "locations", label: "Pickup Locations", value: 40, suffix: "+" },
 ];
 
 export default function Home({ info }) {
+  const { t } = useI18n();
   const [prices, setPrices] = useState([]);
   const [services, setServices] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
@@ -35,6 +37,8 @@ export default function Home({ info }) {
 
   return (
     <div className="pt-16">
+      <Seo path="/" />
+      <LocalBusinessSchema info={info} />
       {/* ================= HERO ================= */}
       <section className="relative min-h-[92vh] overflow-hidden" data-testid="hero-section">
         <div className="absolute inset-0 industrial-grid opacity-40" />
@@ -53,50 +57,50 @@ export default function Home({ info }) {
           >
             <div className="inline-flex items-center gap-2 px-4 py-2 border border-[#D4AF37]/30 bg-[#D4AF37]/5 mb-8">
               <Sparkle className="text-[#D4AF37]" size={14} weight="fill" />
-              <span className="text-xs uppercase tracking-[0.24em] text-[#D4AF37]">GST Certified · Est. Karnataka</span>
+              <span className="text-xs uppercase tracking-[0.24em] text-[#D4AF37]">{t("hero.badge")}</span>
             </div>
 
             <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-semibold text-white leading-[1.05] tracking-tighter" data-testid="hero-title">
-              India's Trusted <br />
-              <span className="text-gold-gradient">Scrap Recycling</span> Partner
+              {t("hero.title1")} <br />
+              <span className="text-gold-gradient">{t("hero.title2")}</span> {t("hero.title3")}
             </h1>
 
             <p className="mt-6 text-lg text-[#94A3B8] max-w-xl leading-relaxed" data-testid="hero-subtitle">
-              {info?.subtitle || "We Buy All Types of Scrap at the Best Market Price"}. Instant quotes, doorstep pickup, and same-day payment.
+              {t("hero.subtitle")}
             </p>
 
             <div className="flex flex-wrap gap-3 mt-10">
               <a href={`tel:${info?.phone}`} className="btn-primary sharp" data-testid="hero-btn-call">
-                <Phone size={16} weight="bold" /> Call Owner
+                <Phone size={16} weight="bold" /> {t("btn.call")}
               </a>
               <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" className="btn-glass sharp" data-testid="hero-btn-whatsapp">
-                <WhatsappLogo size={16} weight="bold" /> WhatsApp
+                <WhatsappLogo size={16} weight="bold" /> {t("btn.whatsapp")}
               </a>
               <Link to="/pickup" className="btn-secondary sharp" data-testid="hero-btn-quote">
-                Get Quote <ArrowRight size={14} weight="bold" />
+                {t("btn.quote")} <ArrowRight size={14} weight="bold" />
               </Link>
               <Link to="/prices" className="btn-glass sharp" data-testid="hero-btn-prices">
-                <CurrencyInr size={16} weight="bold" /> Today's Prices
+                <CurrencyInr size={16} weight="bold" /> {t("btn.prices")}
               </Link>
               <Link to="/gallery" className="btn-glass sharp" data-testid="hero-btn-gallery">
-                <Images size={16} weight="bold" /> Gallery
+                <Images size={16} weight="bold" /> {t("btn.gallery")}
               </Link>
               <Link to="/pickup" className="btn-glass sharp" data-testid="hero-btn-pickup">
-                <Truck size={16} weight="bold" /> Request Pickup
+                <Truck size={16} weight="bold" /> {t("btn.pickup")}
               </Link>
               <a href={info?.google_maps_url} target="_blank" rel="noopener noreferrer" className="btn-glass sharp" data-testid="hero-btn-directions">
-                <MapPin size={16} weight="bold" /> Directions
+                <MapPin size={16} weight="bold" /> {t("btn.directions")}
               </a>
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-14" data-testid="hero-stats">
+            <div className="grid grid-cols-3 gap-4 mt-14" data-testid="hero-stats">
               {stats.map((s) => (
                 <div key={s.label} className="border-l border-[#D4AF37]/30 pl-4">
                   <div className="stat-number text-3xl sm:text-4xl font-semibold">
                     <Counter to={s.value} suffix={s.suffix} />
                   </div>
-                  <div className="text-[10px] tracking-[0.2em] uppercase text-[#94A3B8] mt-1">{s.label}</div>
+                  <div className="text-[10px] tracking-[0.2em] uppercase text-[#94A3B8] mt-1">{t(`stats.${s.key}`)}</div>
                 </div>
               ))}
             </div>
@@ -124,7 +128,7 @@ export default function Home({ info }) {
           {[
             { icon: <ShieldCheck size={28} weight="duotone" />, title: "Transparent Pricing", desc: "Daily market rates published live. Zero hidden charges." },
             { icon: <Handshake size={28} weight="duotone" />, title: "Instant Payment", desc: "NEFT / RTGS / UPI or cash on the spot after weighing." },
-            { icon: <Recycle size={28} weight="duotone" />, title: "Certified Recycling", desc: "GST compliant scrap dealer for factories and dismantling." },
+            { icon: <Recycle size={28} weight="duotone" />, title: "GST Compliant", desc: "GST compliant scrap dealer for factories, industries, and dismantling projects." },
           ].map((c) => (
             <div key={c.title} className="glass-card p-8 sharp hover-lift" data-testid={`trust-card-${c.title.toLowerCase().replace(/\s+/g, "-")}`}>
               <div className="text-[#D4AF37] mb-4">{c.icon}</div>

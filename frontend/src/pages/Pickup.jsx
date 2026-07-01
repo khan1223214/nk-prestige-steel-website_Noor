@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { toast } from "sonner";
 import { Truck, UploadSimple, X, Phone, WhatsappLogo } from "@phosphor-icons/react";
+import Seo from "../components/Seo";
 
 export default function Pickup({ info }) {
   const [form, setForm] = useState({
@@ -64,6 +65,7 @@ export default function Pickup({ info }) {
 
   return (
     <div className="pt-24 pb-20" data-testid="pickup-page">
+      <Seo title="Request Free Scrap Pickup — NK Prestige Steel Corporation" description="Free doorstep scrap pickup across Karnataka. Instant quote in 30 minutes. Upload photos, choose scrap type, get paid on the spot." path="/pickup" />
       <div className="section-container">
         <div className="grid lg:grid-cols-5 gap-8">
           <div className="lg:col-span-3">

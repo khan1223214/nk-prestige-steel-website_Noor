@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { MagnifyingGlass, Recycle } from "@phosphor-icons/react";
 import * as Icons from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
+import Seo from "../components/Seo";
 
 export default function Services() {
   const [services, setServices] = useState([]);
@@ -29,6 +30,7 @@ export default function Services() {
 
   return (
     <div className="pt-24 pb-20" data-testid="services-page">
+      <Seo title="Scrap Services — NK Prestige Steel Corporation" description="Complete scrap dealer and demolition services in Karnataka. MS, TMT, copper, brass, aluminium, e-waste, factory demolition, and more." path="/services" />
       <div className="section-container">
         <div className="mb-10">
           <div className="text-xs uppercase tracking-[0.24em] text-[#D4AF37] mb-3">What We Buy · What We Do</div>

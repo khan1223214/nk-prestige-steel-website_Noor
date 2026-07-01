@@ -40,7 +40,7 @@ export default function Footer({ info }) {
               </div>
             </div>
             <p className="text-[#94A3B8] leading-relaxed text-sm max-w-md">
-              {info.tagline}. We are Karnataka's premium scrap recycling partner buying ferrous, non-ferrous, electronic,
+              {info.tagline}. We are Karnataka's premium scrap dealer buying ferrous, non-ferrous, electronic,
               and industrial scrap at the best market rates.
             </p>
 
@@ -82,22 +82,28 @@ export default function Footer({ info }) {
           {/* Contact */}
           <div>
             <h4 className="font-display text-[#D4AF37] text-sm uppercase tracking-[0.2em] mb-5">Reach Us</h4>
-            <ul className="space-y-3 text-sm text-[#94A3B8]">
-              <li className="flex items-start gap-2">
-                <Phone className="mt-0.5 shrink-0 text-[#D4AF37]" size={16} />
-                <a href={`tel:${info.phone}`}>{info.phone}</a>
-              </li>
-              <li className="flex items-start gap-2">
-                <WhatsappLogo className="mt-0.5 shrink-0 text-[#D4AF37]" size={16} />
-                <a href={`https://wa.me/${(info.whatsapp || "").replace(/\s|\+/g, "")}`} target="_blank" rel="noopener noreferrer">
-                  {info.whatsapp}
-                </a>
-              </li>
-              <li className="flex items-start gap-2">
-                <EnvelopeSimple className="mt-0.5 shrink-0 text-[#D4AF37]" size={16} />
-                <a href={`mailto:${info.email}`}>{info.email}</a>
-              </li>
-              <li className="flex items-start gap-2">
+            <ul className="space-y-2 text-sm text-[#94A3B8]">
+              {[info.phone, ...(info.extra_phones || [])].filter(Boolean).map((p, i) => (
+                <li key={`p${i}`} className="flex items-start gap-2">
+                  <Phone className="mt-0.5 shrink-0 text-[#D4AF37]" size={16} />
+                  <a href={`tel:${p}`} className="hover:text-[#D4AF37] transition-colors">{p}</a>
+                </li>
+              ))}
+              {[info.whatsapp, ...(info.extra_whatsapps || [])].filter(Boolean).map((w, i) => (
+                <li key={`w${i}`} className="flex items-start gap-2">
+                  <WhatsappLogo className="mt-0.5 shrink-0 text-[#D4AF37]" size={16} />
+                  <a href={`https://wa.me/${(w || "").replace(/\s|\+/g, "")}`} target="_blank" rel="noopener noreferrer" className="hover:text-[#D4AF37] transition-colors">
+                    {w}
+                  </a>
+                </li>
+              ))}
+              {[info.email, ...(info.extra_emails || [])].filter(Boolean).map((e, i) => (
+                <li key={`e${i}`} className="flex items-start gap-2">
+                  <EnvelopeSimple className="mt-0.5 shrink-0 text-[#D4AF37]" size={16} />
+                  <a href={`mailto:${e}`} className="hover:text-[#D4AF37] transition-colors break-all">{e}</a>
+                </li>
+              ))}
+              <li className="flex items-start gap-2 pt-1">
                 <MapPin className="mt-0.5 shrink-0 text-[#D4AF37]" size={16} />
                 <span>{info.office_address}</span>
               </li>

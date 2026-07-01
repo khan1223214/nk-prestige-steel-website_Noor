@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { api, BACKEND_URL } from "../lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, MagnifyingGlass } from "@phosphor-icons/react";
+import Seo from "../components/Seo";
 
 const fallbackImages = [
   "https://images.unsplash.com/photo-1770068511830-a6cc498f4bfe",
@@ -47,6 +48,7 @@ export default function Gallery() {
 
   return (
     <div className="pt-24 pb-20" data-testid="gallery-page">
+      <Seo title="Gallery — NK Prestige Steel Corporation Field Operations" description="Photos and videos of our scrap yard operations, industrial pickups, factory dismantling, and completed recycling projects across Karnataka." path="/gallery" />
       <div className="section-container">
         <div className="mb-10">
           <div className="text-xs uppercase tracking-[0.24em] text-[#D4AF37] mb-3">Field Photography · Video</div>

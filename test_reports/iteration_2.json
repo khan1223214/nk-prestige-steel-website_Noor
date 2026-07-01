@@ -1,0 +1,48 @@
+{
+  "summary": "Iteration 2 E2E for NK Prestige Steel. Backend: 7/10 new pytest tests passed (business-info extras, admin edit of extras, 2026 prices MS Heavy=44.5, gallery seed of 8 https:// items, robots.txt + sitemap.xml with all required routes, AI chat via Emergent LLM openai gpt-5.4-mini returning real quotes). 3 FAILED: brute-force lockout, newsletter 5/hour rate limit, pickup 10/hour rate limit — all due to same k8s-ingress multi-source-IP root cause. Frontend: verified hero H1 'Karnataka\\'s Premium Scrap Dealer', stats grid 400+/5+/40+ (no Tonnes Recycled), GST compliant text, EN↔KN language toggle (Kannada rendered), AI chat widget returns real reply for '10kg copper wire' (₹8,550 quote), FloatingContactBar extras panel lists +91 8310064128, /contact contact-phone-0/1 + contact-wa-0/1 with +91 8310064128, /gallery renders 8 unsplash/pexels images, per-route unique document.title via <Seo />, Admin BusinessInfo tab renders Additional Contacts editors (Extra Phones/WhatsApp/Emails) with Add + delete controls.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "/api/auth/login", "issue": "Brute-force lockout NEVER triggers on the live URL. After 7 wrong-password attempts we still get 401, never 429. RCA: k8s ingress forwards traffic from multiple source IPs (10.208.128.2 AND 10.208.128.6 seen in db.login_attempts). _client_ip() uses get_remote_address() which reads the direct socket peer, not X-Forwarded-For. Result: attempts are split across two identifiers ({ip1}:email count=3, {ip2}:email count=4) and neither reaches MAX_LOGIN_ATTEMPTS=5.", "priority": "HIGH"},
+      {"endpoint": "/api/newsletter (5/hour) and /api/pickup (10/hour)", "issue": "Slowapi rate limits never trigger. Same RCA as above: get_remote_address returns direct-peer IP but the k8s ingress balances requests across two peer IPs, so per-IP counter never accumulates enough. Verified: 8 newsletter POSTs and 12 pickup POSTs in <2s all returned 200.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "/api/sitemap.xml", "issue": "Base URL uses internal http://prestige-steel-hub.cluster-5.preview.emergentcf.cloud/ (from request.base_url) instead of the public https:// external URL. Search-engine crawlers reading the public /api/sitemap.xml will see non-canonical URLs. Consider using an env var like PUBLIC_URL."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration2.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iter2_results.xml"
+  ],
+  "action_items": [
+    "FIX brute-force lockout: change _client_ip() (and slowapi Limiter key_func) to read X-Forwarded-For header first (e.g., request.headers.get('x-forwarded-for','').split(',')[0].strip() or fallback). Alternatively key lockout by email-only (not ip:email) since the attacker email is the sensitive resource.",
+    "FIX slowapi Limiter: pass a custom key_func that respects X-Forwarded-For, OR trust the proxy — e.g., `Limiter(key_func=lambda r: r.headers.get('x-forwarded-for','').split(',')[0].strip() or get_remote_address(r))`. Without this all rate limits (login 10/min, pickup 10/hr, newsletter 5/hr, ai chat 20/min) are effectively disabled on the deployed URL.",
+    "(minor) Use env var for /api/sitemap.xml base URL to emit canonical https:// URLs.",
+    "(minor) Cleanup: /app/backend/tests/backend_test.py::TestBusinessInfo.test_update_business_info reverts tagline back to 'India\\'s Trusted Scrap Recycling Partner' — collides with new rebrand. Should revert to the current default 'Premium Scrap Dealer & Metal Trading' instead."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now ~1060 lines — MUST split into routers/models/seed modules (>700 loc guideline).",
+    "SlowAPIMiddleware is NOT installed on the FastAPI app; only the exception handler is added. Decorators still work because endpoints take Request, but this is fragile. Prefer explicit `app.add_middleware(SlowAPIMiddleware)`.",
+    "get_remote_address is unsuitable behind k8s ingress — see critical bugs above.",
+    "put_object/get_object still use sync `requests` inside async endpoints (blocks event loop). Same finding as iteration 1.",
+    "Brute-force lockout keys by ip:email — under real attack an attacker can trivially rotate IPs and never hit the limit. Consider keying by email-only for per-account lockout, with a global ip-based backoff for enumeration prevention.",
+    "Migration v3 rebrands to 'Premium Scrap Recycling & Metal Trading' but Pydantic model default is 'Premium Scrap Dealer & Metal Trading'. Mismatch could confuse future migrations; current live value is the model default which matches spec.",
+    "/api/ai/chat streams no history — each request rebuilds LlmChat from scratch, so multi-turn conversation memory relies on the emergentintegrations backend keyed by session_id. Verify that behavior on the provider side."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration2.py (new)",
+    "/app/test_reports/pytest/iter2_results.xml (new)"
+  ],
+  "success_rate": {"backend": "70% (7/10 new tests; 24/24 legacy regression from iteration 1 still passes)", "frontend": "100% of tested flows"},
+  "test_credentials": "admin@nkprestigesteel.com / NK@Prestige2026 (works)",
+  "seed_data_creation": "None persisted; test extras were reverted; login_attempts contains locktest_* throwaway keys (harmless, expire naturally).",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "New test file: /app/backend/tests/test_iteration2.py. Run with: cd /app && python -m pytest backend/tests/test_iteration2.py -o addopts='' -v. When retesting lockout, clear db.login_attempts collection first. The 3 failing tests all share the SAME root cause (k8s ingress multi-source-IP + get_remote_address). Frontend testids added in iter2: lang-toggle, ai-chat-toggle/panel/input/send, float-extras-toggle/panel, contact-phone-0..N, contact-wa-0..N, contact-email-0..N. AI chat verified end-to-end with real gpt-5.4-mini reply ('Copper Wire (Bare) is ₹855/kg. For 10 kg, the instant quote is ₹8,550').",
+  "rca_of_the_issue": "K8s ingress terminates TLS and forwards to backend pod from multiple internal load-balancer source IPs (observed 10.208.128.2 and 10.208.128.6). get_remote_address() returns the SOCKET PEER (the ingress pod IP), not the real client IP which is in the X-Forwarded-For header. So both (a) brute-force login lockout keyed by `ip:email` and (b) slowapi rate limits keyed by ip get their counters split across two identifiers. Fix: replace key_func to prefer X-Forwarded-For, and change lockout identifier to email-only (or ip+email where ip is X-F-F). Reproduction: `for i in {1..7}; do curl -s -o /dev/null -w '%{http_code}\\n' -X POST $URL/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"nobody@x.com\",\"password\":\"wrong\"}'; done` — all 7 return 401 (never 429). db.login_attempts confirms the split: `{_id:'10.208.128.6:...', count:4}` and `{_id:'10.208.128.2:...', count:3}`."
+}

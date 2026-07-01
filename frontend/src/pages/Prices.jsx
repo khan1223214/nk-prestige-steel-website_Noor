@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { CaretUp, CaretDown, MagnifyingGlass, Printer, Clock } from "@phosphor-icons/react";
+import Seo from "../components/Seo";
 
 export default function Prices() {
   const [prices, setPrices] = useState([]);
@@ -42,6 +43,7 @@ export default function Prices() {
 
   return (
     <div className="pt-24 pb-20" data-testid="prices-page">
+      <Seo title="Today's Live Scrap Prices — NK Prestige Steel Corporation" description="Daily updated scrap rates for iron, copper, brass, aluminium, stainless steel, batteries, electronics, and more. Search, filter, and check trends." path="/prices" />
       <div className="section-container">
         <div className="flex items-end justify-between flex-wrap gap-6 mb-10">
           <div>

@@ -14,11 +14,15 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, UploadFile, File, Header, Query, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, PlainTextResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 import pandas as pd
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 # ------------- Config -------------
 mongo_url = os.environ['MONGO_URL']
@@ -38,8 +42,17 @@ db = client[DB_NAME]
 app = FastAPI(title="NK Prestige Steel API")
 api_router = APIRouter(prefix="/api")
 
+# Rate limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Brute force lockout config
+MAX_LOGIN_ATTEMPTS = 5
+LOCKOUT_MINUTES = 15
 
 
 # ------------- Helpers -------------
@@ -250,15 +263,26 @@ class PickupRequest(PickupRequestIn):
     created_at: str
 
 
+class AdditionalAddress(BaseModel):
+    label: str = ""
+    address: str = ""
+    maps_url: str = ""
+
+
 class BusinessInfo(BaseModel):
     business_name: str = "NK Prestige Steel Corporation"
-    tagline: str = "India's Trusted Scrap Recycling Partner"
+    tagline: str = "Premium Scrap Dealer & Metal Trading"
     subtitle: str = "We Buy All Types of Scrap at the Best Market Price"
     phone: str = "+91 9741309869"
     whatsapp: str = "+91 9741309869"
     email: str = "nkprestigesteel@gmail.com"
+    # Additional contacts (owner can add/remove)
+    extra_phones: List[str] = Field(default_factory=lambda: ["+91 8310064128"])
+    extra_whatsapps: List[str] = Field(default_factory=lambda: ["+91 8310064128"])
+    extra_emails: List[str] = Field(default_factory=list)
     office_address: str = "Troop Lane Main Road, Near Jai Bheem Circle, Ramanagara - 562159, Karnataka"
     godown_address: str = "278/1 Near Kannamangaladoddi, Close to State Highway 275, Ramanagara - 562159, Karnataka"
+    additional_addresses: List[AdditionalAddress] = Field(default_factory=list)
     gst_number: str = "29KZRPK1994P1ZV"
     google_maps_url: str = "https://maps.google.com/?q=Ramanagara+Karnataka"
     working_hours: str = "Mon-Sat: 9:00 AM - 7:00 PM"
@@ -274,12 +298,51 @@ class NewsletterIn(BaseModel):
 
 
 # ------------- Auth Routes -------------
+def _client_ip(request: Request) -> str:
+    try:
+        return get_remote_address(request)
+    except Exception:
+        return "unknown"
+
+
+async def _check_lockout(identifier: str):
+    now = datetime.now(timezone.utc)
+    rec = await db.login_attempts.find_one({"_id": identifier})
+    if not rec:
+        return
+    if rec.get("locked_until"):
+        locked_until = datetime.fromisoformat(rec["locked_until"])
+        if now < locked_until:
+            wait = int((locked_until - now).total_seconds() / 60) + 1
+            raise HTTPException(status_code=429, detail=f"Too many failed attempts. Try again in {wait} minute(s).")
+
+
+async def _record_failed(identifier: str):
+    now = datetime.now(timezone.utc)
+    rec = await db.login_attempts.find_one({"_id": identifier}) or {"_id": identifier, "count": 0}
+    count = rec.get("count", 0) + 1
+    update = {"count": count, "last_attempt": now.isoformat()}
+    if count >= MAX_LOGIN_ATTEMPTS:
+        update["locked_until"] = (now + timedelta(minutes=LOCKOUT_MINUTES)).isoformat()
+        update["count"] = 0
+    await db.login_attempts.update_one({"_id": identifier}, {"$set": update}, upsert=True)
+
+
+async def _clear_attempts(identifier: str):
+    await db.login_attempts.delete_one({"_id": identifier})
+
+
 @api_router.post("/auth/login", response_model=TokenOut)
-async def login(body: LoginIn):
+@limiter.limit("10/minute")
+async def login(request: Request, body: LoginIn):
     email = body.email.lower().strip()
+    identifier = f"{_client_ip(request)}:{email}"
+    await _check_lockout(identifier)
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(body.password, user["password_hash"]):
+        await _record_failed(identifier)
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    await _clear_attempts(identifier)
     token = create_access_token(email)
     return TokenOut(access_token=token, email=email)
 
@@ -573,7 +636,8 @@ async def get_file(file_path: str):
 
 # ------------- Pickup Requests -------------
 @api_router.post("/pickup", response_model=PickupRequest)
-async def create_pickup(body: PickupRequestIn):
+@limiter.limit("10/hour")
+async def create_pickup(request: Request, body: PickupRequestIn):
     doc = body.model_dump()
     doc["id"] = str(uuid.uuid4())
     doc["status"] = "new"
@@ -613,13 +677,98 @@ async def delete_pickup(pid: str, admin=Depends(get_current_admin)):
 
 # ------------- Newsletter -------------
 @api_router.post("/newsletter")
-async def newsletter(body: NewsletterIn):
+@limiter.limit("5/hour")
+async def newsletter(request: Request, body: NewsletterIn):
     await db.newsletter.update_one(
         {"email": body.email.lower()},
         {"$set": {"email": body.email.lower(), "created_at": now_iso()}},
         upsert=True,
     )
     return {"ok": True}
+
+
+# ------------- AI Chat Assistant -------------
+class ChatIn(BaseModel):
+    session_id: str
+    message: str
+
+
+class ChatOut(BaseModel):
+    session_id: str
+    reply: str
+
+
+async def _build_ai_system_prompt() -> str:
+    info_doc = await db.business_info.find_one({"_id": "singleton"}) or {}
+    prices = await db.prices.find({"visible": True}, {"_id": 0}).sort("category", 1).to_list(200)
+    price_lines = "\n".join(
+        f"- {p['name']} ({p['category']}): ₹{p['price_per_kg']}/kg" for p in prices[:40]
+    )
+    return f"""You are the friendly AI Instant Quote Assistant for NK Prestige Steel Corporation, a premium scrap dealer in Karnataka, India.
+
+BUSINESS INFO:
+- Name: {info_doc.get('business_name', 'NK Prestige Steel Corporation')}
+- Phone: {info_doc.get('phone', '')}
+- WhatsApp: {info_doc.get('whatsapp', '')}
+- Email: {info_doc.get('email', '')}
+- Office: {info_doc.get('office_address', '')}
+- Godown: {info_doc.get('godown_address', '')}
+- GST: {info_doc.get('gst_number', '')}
+- Hours: {info_doc.get('working_hours', '')}
+
+TODAY'S LIVE SCRAP PRICES:
+{price_lines}
+
+YOUR JOB:
+- Answer customer questions about scrap prices, pickup, services, and business location.
+- Give quick INSTANT QUOTES when a customer mentions a scrap type and quantity — multiply price/kg by quantity.
+- Be short (2-4 lines maximum), warm, and helpful.
+- When customers want to book a pickup, direct them to the Request Pickup page or the WhatsApp number.
+- Prices are indicative — always mention "final price after weighing at godown".
+- Never invent prices for items not in the list — ask them to call for a custom quote.
+- Reply in the language the user writes in (English or Kannada)."""
+
+
+@api_router.post("/ai/chat", response_model=ChatOut)
+@limiter.limit("20/minute")
+async def ai_chat(request: Request, body: ChatIn):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=503, detail="AI service unavailable")
+    try:
+        system_prompt = await _build_ai_system_prompt()
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=body.session_id,
+            system_message=system_prompt,
+        ).with_model("openai", "gpt-5.4-mini")
+        response = await chat.send_message(UserMessage(text=body.message))
+        return ChatOut(session_id=body.session_id, reply=str(response))
+    except Exception as e:
+        logger.error(f"AI chat error: {e}")
+        raise HTTPException(status_code=500, detail="AI assistant temporarily unavailable. Please call us directly.")
+
+
+# ------------- SEO endpoints -------------
+@api_router.get("/robots.txt", response_class=PlainTextResponse)
+async def robots():
+    return """User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /login
+
+Sitemap: /api/sitemap.xml
+"""
+
+
+@api_router.get("/sitemap.xml")
+async def sitemap(request: Request):
+    base = str(request.base_url).rstrip("/").replace("/api", "")
+    urls = ["/", "/prices", "/services", "/gallery", "/pickup", "/contact"]
+    xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    for u in urls:
+        xml += f"  <url><loc>{base}{u}</loc><changefreq>daily</changefreq><priority>{1.0 if u == '/' else 0.7}</priority></url>\n"
+    xml += "</urlset>"
+    return Response(content=xml, media_type="application/xml")
 
 
 # ------------- Seed / Startup -------------
@@ -662,36 +811,56 @@ DEFAULT_SERVICES = [
 ]
 
 DEFAULT_PRICES = [
-    ("Ferrous", "MS Scrap (Heavy)", 42.5, 41.0),
-    ("Ferrous", "MS Scrap (Light)", 38.0, 37.5),
-    ("Ferrous", "TMT Rebar Scrap", 44.0, 43.5),
-    ("Ferrous", "Iron Turning", 32.0, 33.0),
-    ("Ferrous", "Cast Iron", 36.5, 36.0),
-    ("Non-Ferrous", "Copper (Bright)", 785.0, 770.0),
-    ("Non-Ferrous", "Copper (Heavy)", 745.0, 740.0),
-    ("Non-Ferrous", "Copper Wire (Bare)", 820.0, 810.0),
-    ("Non-Ferrous", "Brass (Honey)", 505.0, 500.0),
-    ("Non-Ferrous", "Brass (Mixed)", 465.0, 470.0),
-    ("Non-Ferrous", "Aluminium (Sheet)", 175.0, 172.0),
-    ("Non-Ferrous", "Aluminium (Cast)", 155.0, 158.0),
-    ("Non-Ferrous", "Aluminium (Wire)", 195.0, 190.0),
-    ("Stainless", "SS 304", 128.0, 125.0),
-    ("Stainless", "SS 316", 165.0, 160.0),
-    ("Stainless", "SS 202", 78.0, 76.0),
-    ("Battery", "Lead-Acid Battery", 92.0, 90.0),
-    ("Battery", "Lithium-Ion Battery", 145.0, 148.0),
-    ("Battery", "Inverter Battery", 88.0, 86.0),
-    ("Electrical", "Cable Scrap (Copper)", 480.0, 475.0),
-    ("Electrical", "Cable Scrap (Aluminium)", 145.0, 142.0),
-    ("Electrical", "Transformer Scrap", 68.0, 65.0),
-    ("Electronic", "PCB Boards (Mixed)", 220.0, 215.0),
-    ("Electronic", "Motherboard Scrap", 380.0, 375.0),
-    ("Electronic", "AC Compressor", 55.0, 54.0),
-    ("Electronic", "Generator Scrap", 48.0, 46.0),
-    ("Plastic", "HDPE Plastic", 42.0, 43.0),
-    ("Plastic", "PVC Plastic", 28.0, 27.5),
-    ("Paper", "Cardboard", 14.0, 13.5),
-    ("Paper", "Newspaper", 16.5, 16.0),
+    # Ferrous — Jan 2026 India market rates
+    ("Ferrous", "MS Scrap (Heavy)", 44.5, 43.0),
+    ("Ferrous", "MS Scrap (Light)", 40.0, 39.5),
+    ("Ferrous", "TMT Rebar Scrap", 46.5, 45.5),
+    ("Ferrous", "Iron Turning", 34.0, 33.0),
+    ("Ferrous", "Cast Iron", 38.5, 37.5),
+    # Non-Ferrous
+    ("Non-Ferrous", "Copper (Bright)", 815.0, 800.0),
+    ("Non-Ferrous", "Copper (Heavy)", 780.0, 770.0),
+    ("Non-Ferrous", "Copper Wire (Bare)", 855.0, 840.0),
+    ("Non-Ferrous", "Brass (Honey)", 525.0, 515.0),
+    ("Non-Ferrous", "Brass (Mixed)", 485.0, 490.0),
+    ("Non-Ferrous", "Aluminium (Sheet)", 185.0, 180.0),
+    ("Non-Ferrous", "Aluminium (Cast)", 162.0, 165.0),
+    ("Non-Ferrous", "Aluminium (Wire)", 205.0, 198.0),
+    # Stainless
+    ("Stainless", "SS 304", 135.0, 130.0),
+    ("Stainless", "SS 316", 172.0, 168.0),
+    ("Stainless", "SS 202", 82.0, 80.0),
+    # Battery
+    ("Battery", "Lead-Acid Battery", 96.0, 94.0),
+    ("Battery", "Lithium-Ion Battery", 152.0, 150.0),
+    ("Battery", "Inverter Battery", 92.0, 90.0),
+    # Electrical
+    ("Electrical", "Cable Scrap (Copper)", 500.0, 490.0),
+    ("Electrical", "Cable Scrap (Aluminium)", 152.0, 148.0),
+    ("Electrical", "Transformer Scrap", 72.0, 68.0),
+    # Electronic
+    ("Electronic", "PCB Boards (Mixed)", 230.0, 222.0),
+    ("Electronic", "Motherboard Scrap", 395.0, 385.0),
+    ("Electronic", "AC Compressor", 58.0, 56.0),
+    ("Electronic", "Generator Scrap", 52.0, 49.0),
+    # Plastic
+    ("Plastic", "HDPE Plastic", 44.0, 45.0),
+    ("Plastic", "PVC Plastic", 30.0, 29.0),
+    # Paper
+    ("Paper", "Cardboard", 15.5, 14.5),
+    ("Paper", "Newspaper", 17.5, 17.0),
+]
+
+# Demo gallery items (Karnataka-appropriate scrap yard photos from stock sources)
+DEFAULT_GALLERY_URLS = [
+    ("https://images.unsplash.com/photo-1770068511830-a6cc498f4bfe", "Aerial Scrap Yard", "Yard Operations"),
+    ("https://images.unsplash.com/photo-1767340078189-4258fbb7bd7c", "Engine Recycling", "Automotive"),
+    ("https://images.pexels.com/photos/36095234/pexels-photo-36095234.jpeg", "Industrial Steel", "Steel"),
+    ("https://images.pexels.com/photos/32770255/pexels-photo-32770255.jpeg", "Corporate Facility", "Facility"),
+    ("https://images.pexels.com/photos/35058546/pexels-photo-35058546.jpeg", "Loading Bay", "Facility"),
+    ("https://images.unsplash.com/photo-1605733513597-a8f8341084e6", "Metal Sorting", "Yard Operations"),
+    ("https://images.unsplash.com/photo-1580982327559-c1202864eb05", "Recycling Process", "Recycling"),
+    ("https://images.unsplash.com/photo-1611273426858-450d8e3c9fce", "Steel Fabrication", "Steel"),
 ]
 
 DEFAULT_TESTIMONIALS = [
@@ -788,6 +957,70 @@ async def seed_data():
                 "order": i,
                 "visible": True,
             })
+
+    # Migration v2: update to 2026 prices + add extra phone + seed demo gallery
+    settings = await db.settings.find_one({"_id": "seed"}) or {}
+    version = settings.get("version", 1)
+    if version < 2:
+        # Update all seeded prices to their DEFAULT_PRICES values (matches by name)
+        for cat, name, today, prev in DEFAULT_PRICES:
+            existing = await db.prices.find_one({"name": name})
+            if existing:
+                await db.prices.update_one(
+                    {"name": name},
+                    {"$set": {
+                        "category": cat,
+                        "price_per_kg": today,
+                        "price_per_ton": today * 1000,
+                        "previous_price": prev,
+                        "updated_at": now_iso(),
+                    }},
+                )
+        # Ensure extra phone/whatsapp is populated for existing business_info
+        info_doc = await db.business_info.find_one({"_id": "singleton"})
+        if info_doc:
+            extras_p = info_doc.get("extra_phones") or []
+            extras_w = info_doc.get("extra_whatsapps") or []
+            if "+91 8310064128" not in extras_p:
+                extras_p.append("+91 8310064128")
+            if "+91 8310064128" not in extras_w:
+                extras_w.append("+91 8310064128")
+            await db.business_info.update_one(
+                {"_id": "singleton"},
+                {"$set": {
+                    "extra_phones": extras_p,
+                    "extra_whatsapps": extras_w,
+                    "extra_emails": info_doc.get("extra_emails", []),
+                    "additional_addresses": info_doc.get("additional_addresses", []),
+                }},
+            )
+        # Seed demo gallery items if empty
+        if await db.gallery.count_documents({}) == 0:
+            for i, (url, title, cat) in enumerate(DEFAULT_GALLERY_URLS):
+                await db.gallery.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "title": title,
+                    "caption": "",
+                    "category": cat,
+                    "media_type": "image",
+                    "file_path": url,
+                    "order": i,
+                    "visible": True,
+                    "created_at": now_iso(),
+                })
+            logger.info(f"Seeded {len(DEFAULT_GALLERY_URLS)} demo gallery items")
+
+        await db.settings.update_one({"_id": "seed"}, {"$set": {"version": 2}}, upsert=True)
+        logger.info("Migration v2 applied: updated prices, extra phone, demo gallery")
+
+    # Migration v3: replace old tagline
+    if version < 3:
+        await db.business_info.update_one(
+            {"_id": "singleton", "tagline": "India's Trusted Scrap Recycling Partner"},
+            {"$set": {"tagline": "Premium Scrap Recycling & Metal Trading"}},
+        )
+        await db.settings.update_one({"_id": "seed"}, {"$set": {"version": 3}}, upsert=True)
+        logger.info("Migration v3 applied: rebranded tagline")
 
 
 @app.on_event("startup")

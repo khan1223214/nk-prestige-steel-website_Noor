@@ -108,7 +108,13 @@ function BusinessInfoTab() {
   const [info, setInfo] = useState(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
-    api.get("/business-info").then((r) => setInfo(r.data));
+    api.get("/business-info").then((r) => setInfo({
+      ...r.data,
+      extra_phones: r.data.extra_phones || [],
+      extra_whatsapps: r.data.extra_whatsapps || [],
+      extra_emails: r.data.extra_emails || [],
+      additional_addresses: r.data.additional_addresses || [],
+    }));
   }, []);
   if (!info) return <p className="text-[#94A3B8]">Loading…</p>;
 
@@ -123,20 +129,79 @@ function BusinessInfoTab() {
     setSaving(false);
   };
 
-  const fields = [
+  const updateListItem = (key, i, value) => {
+    const list = [...(info[key] || [])];
+    list[i] = value;
+    setInfo({ ...info, [key]: list });
+  };
+  const addListItem = (key, value = "") => setInfo({ ...info, [key]: [...(info[key] || []), value] });
+  const removeListItem = (key, i) => setInfo({ ...info, [key]: info[key].filter((_, idx) => idx !== i) });
+
+  const updateAddress = (i, field, value) => {
+    const list = [...(info.additional_addresses || [])];
+    list[i] = { ...list[i], [field]: value };
+    setInfo({ ...info, additional_addresses: list });
+  };
+  const addAddress = () => setInfo({
+    ...info,
+    additional_addresses: [...(info.additional_addresses || []), { label: "", address: "", maps_url: "" }],
+  });
+  const removeAddress = (i) => setInfo({
+    ...info,
+    additional_addresses: info.additional_addresses.filter((_, idx) => idx !== i),
+  });
+
+  const singleFields = [
     ["business_name", "Business Name"], ["tagline", "Tagline"], ["subtitle", "Hero Subtitle"],
-    ["phone", "Phone"], ["whatsapp", "WhatsApp"], ["email", "Email"], ["gst_number", "GST Number"],
+    ["phone", "Primary Phone"], ["whatsapp", "Primary WhatsApp"], ["email", "Primary Email"],
+    ["gst_number", "GST Number"], ["google_maps_url", "Google Maps URL"], ["working_hours", "Working Hours"],
     ["office_address", "Office Address"], ["godown_address", "Godown Address"],
-    ["google_maps_url", "Google Maps URL"], ["working_hours", "Working Hours"],
     ["facebook", "Facebook URL"], ["instagram", "Instagram URL"], ["linkedin", "LinkedIn URL"],
     ["twitter", "Twitter URL"], ["youtube", "YouTube URL"],
   ];
 
+  const ListEditor = ({ label, k, placeholder }) => (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <span className="block text-xs uppercase tracking-widest text-[#94A3B8]">{label}</span>
+        <button
+          onClick={() => addListItem(k)}
+          className="text-[10px] uppercase tracking-widest text-[#D4AF37] hover:text-[#F0C420] flex items-center gap-1"
+          data-testid={`add-${k}`}
+        >
+          <Plus size={12} weight="bold" /> Add
+        </button>
+      </div>
+      <div className="space-y-2">
+        {(info[k] || []).length === 0 && <p className="text-[10px] text-[#94A3B8] italic">None. Click "Add" to insert.</p>}
+        {(info[k] || []).map((v, i) => (
+          <div key={i} className="flex gap-2">
+            <input
+              value={v}
+              onChange={(e) => updateListItem(k, i, e.target.value)}
+              placeholder={placeholder}
+              className="flex-1 bg-[#060B14] border border-white/10 text-white px-3 py-2 sharp text-sm focus:border-[#D4AF37] outline-none"
+              data-testid={`${k}-${i}`}
+            />
+            <button
+              onClick={() => removeListItem(k, i)}
+              className="text-[#EF4444] px-3 border border-[#EF4444]/30 hover:bg-[#EF4444]/10"
+              data-testid={`remove-${k}-${i}`}
+            >
+              <Trash size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <SectionHeader title="Business Information" subtitle="These details appear across the site — contact bar, footer, contact page." />
+
       <div className="glass-card sharp p-6 grid md:grid-cols-2 gap-4">
-        {fields.map(([k, label]) => (
+        {singleFields.map(([k, label]) => (
           <label key={k} className="block">
             <span className="block text-xs uppercase tracking-widest text-[#94A3B8] mb-2">{label}</span>
             {k.includes("address") ? (
@@ -158,6 +223,64 @@ function BusinessInfoTab() {
           </label>
         ))}
       </div>
+
+      {/* Extra contacts */}
+      <div className="glass-card sharp p-6 mt-4">
+        <h3 className="font-display text-white text-lg mb-1">Additional Contacts</h3>
+        <p className="text-[#94A3B8] text-xs mb-5">Extra phone numbers, WhatsApp numbers, and emails shown across the site alongside the primary ones.</p>
+        <div className="grid md:grid-cols-3 gap-6">
+          <ListEditor label="Extra Phones" k="extra_phones" placeholder="+91 XXXXXXXXXX" />
+          <ListEditor label="Extra WhatsApp Numbers" k="extra_whatsapps" placeholder="+91 XXXXXXXXXX" />
+          <ListEditor label="Extra Emails" k="extra_emails" placeholder="branch@example.com" />
+        </div>
+      </div>
+
+      {/* Additional addresses */}
+      <div className="glass-card sharp p-6 mt-4">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-display text-white text-lg">Additional Locations</h3>
+            <p className="text-[#94A3B8] text-xs">Add branches, yards, or additional office locations beyond Office and Godown.</p>
+          </div>
+          <button onClick={addAddress} className="btn-glass sharp text-xs" data-testid="add-address">
+            <Plus size={12} weight="bold" /> Add Location
+          </button>
+        </div>
+        <div className="space-y-4">
+          {(info.additional_addresses || []).length === 0 && (
+            <p className="text-[10px] text-[#94A3B8] italic">No additional addresses.</p>
+          )}
+          {(info.additional_addresses || []).map((a, i) => (
+            <div key={i} className="grid md:grid-cols-3 gap-3 border border-white/10 p-4" data-testid={`address-${i}`}>
+              <input
+                value={a.label || ""}
+                onChange={(e) => updateAddress(i, "label", e.target.value)}
+                placeholder="Label (e.g., Bangalore Branch)"
+                className="bg-[#060B14] border border-white/10 text-white px-3 py-2 sharp text-sm focus:border-[#D4AF37] outline-none"
+              />
+              <input
+                value={a.address || ""}
+                onChange={(e) => updateAddress(i, "address", e.target.value)}
+                placeholder="Full address"
+                className="bg-[#060B14] border border-white/10 text-white px-3 py-2 sharp text-sm focus:border-[#D4AF37] outline-none md:col-span-2"
+              />
+              <input
+                value={a.maps_url || ""}
+                onChange={(e) => updateAddress(i, "maps_url", e.target.value)}
+                placeholder="Google Maps URL (optional)"
+                className="bg-[#060B14] border border-white/10 text-white px-3 py-2 sharp text-sm focus:border-[#D4AF37] outline-none md:col-span-2"
+              />
+              <button
+                onClick={() => removeAddress(i)}
+                className="text-[#EF4444] border border-[#EF4444]/30 hover:bg-[#EF4444]/10 sharp text-xs px-3"
+              >
+                <Trash size={12} /> Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <button onClick={save} disabled={saving} className="btn-primary sharp mt-6" data-testid="info-save-btn">
         <Check size={14} weight="bold" /> {saving ? "Saving…" : "Save Changes"}
       </button>
@@ -433,13 +556,15 @@ function GalleryTab() {
       />
       {uploading && <p className="text-[#D4AF37] text-sm mb-4">Uploading…</p>}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {items.map((g) => (
+        {items.map((g) => {
+          const src = g.file_path?.startsWith("http") ? g.file_path : `${BACKEND_URL}/api/files/${g.file_path}`;
+          return (
           <div key={g.id} className="glass-card sharp overflow-hidden group relative" data-testid={`gallery-admin-${g.id}`}>
             <div className="aspect-square">
               {g.media_type === "video" ? (
-                <video src={`${BACKEND_URL}/api/files/${g.file_path}`} className="w-full h-full object-cover" />
+                <video src={src} className="w-full h-full object-cover" />
               ) : (
-                <img src={`${BACKEND_URL}/api/files/${g.file_path}`} alt="" className="w-full h-full object-cover" />
+                <img src={src} alt="" className="w-full h-full object-cover" />
               )}
             </div>
             <div className="p-3">
@@ -453,7 +578,8 @@ function GalleryTab() {
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
         {items.length === 0 && <p className="text-[#94A3B8] col-span-full">No gallery items yet — upload some!</p>}
       </div>
     </div>
