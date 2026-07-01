@@ -81,6 +81,7 @@ export default function Admin() {
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
+              data-testid={`admin-tab-${t.key}`}
               className={`px-3 py-2 text-xs uppercase tracking-widest whitespace-nowrap sharp border ${
                 tab === t.key ? "bg-[#D4AF37] text-[#060B14] border-[#D4AF37]" : "border-white/10 text-white/70"
               }`}

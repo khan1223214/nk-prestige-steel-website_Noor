@@ -1,80 +1,60 @@
-# NK Prestige Steel Corporation — Product Requirements Doc
+# NK Prestige Steel Corporation — PRD
 
 ## Original Problem Statement
-World-class premium website for NK Prestige Steel Corporation (scrap dealer, Karnataka, India). Fortune-500 industrial design (dark navy blue + steel grey + gold accent, glassmorphism, Three.js 3D). Fully responsive, SEO-optimized, mobile-friendly, production-ready. React + FastAPI + MongoDB. Deployable on Hostinger with custom domain.
+Fortune-500 industrial premium website for NK Prestige Steel Corporation (scrap dealer, Karnataka). React + FastAPI + MongoDB. Hostinger-deployable.
 
 ## Company Info
-- Business: **NK Prestige Steel Corporation**
-- GST: `29KZRPK1994P1ZV`
-- Primary Phone / WhatsApp: `+91 9741309869`
-- Additional Phone / WhatsApp: `+91 8310064128` (extra_phones / extra_whatsapps)
+- **NK Prestige Steel Corporation** · GST `29KZRPK1994P1ZV`
+- Primary Phone / WhatsApp: `+91 9741309869` · Extra: `+91 8310064128`
 - Email: `nkprestigesteel@gmail.com`
-- Office: Troop Lane Main Road, Near Jai Bheem Circle, Ramanagara – 562159, Karnataka
-- Godown: 278/1 Near Kannamangaladoddi, Close to State Highway 275, Ramanagara – 562159, Karnataka
+- Office: Troop Lane Main Road, Ramanagara – 562159, Karnataka
+- Godown: 278/1 Near Kannamangaladoddi, Ramanagara – 562159, Karnataka
 
-## Admin Credentials
-- Email: `admin@nkprestigesteel.com`
-- Password: `NK@Prestige2026`
+## Admin
+- `admin@nkprestigesteel.com` / `NK@Prestige2026`
+- Change password via Admin → **Change Password** tab, or `/forgot-password` flow
 
-## Brand / Copy
-- Hero H1: **Karnataka's Premium Scrap Dealer**
+## Brand
+- Hero: **Karnataka's Premium Scrap Dealer**
 - Tagline: **Premium Scrap Dealer & Metal Trading**
-- Stats: **400+ Happy Clients · 5+ Years Experience · 40+ Pickup Locations** (Tonnes-Recycled removed)
+- Stats: **400+ Clients · 5+ Years · 40+ Pickup Locations**
 
-## Architecture
-- **Backend**: FastAPI + Motor (MongoDB), JWT bearer auth, Emergent object storage, emergentintegrations LLM (`openai gpt-5.4-mini`), slowapi rate limiting, brute-force lockout (email-keyed, 5 fails → 15 min).
-- **Frontend**: React 19 + Router 7 + Tailwind + Shadcn UI + @react-three/fiber v9 + framer-motion + react-fast-marquee + Phosphor Icons + custom i18n (EN + KN).
-- **SEO**: React 19 native `<title>`/`<meta>` hoisting via `<Seo />`; sitemap.xml + robots.txt (both `/api/…` and static in `/public`); LocalBusiness JSON-LD on Home; `PUBLIC_URL` env var for canonical https base.
-- **DB**: users, business_info (singleton with extra_phones/whatsapps/emails + additional_addresses), prices, services, testimonials, faqs, gallery (with demo Unsplash/Pexels URLs seeded), pickups, newsletter, login_attempts, settings (seed version).
+## Stack
+- **Backend**: FastAPI + Motor (Mongo) + JWT + slowapi rate-limit + brute-force lockout + emergentintegrations LLM (openai gpt-5.4-mini) + reportlab PDF + httpx async storage + Emergent object storage.
+- **Frontend**: React 19 + Router 7 + Tailwind + Shadcn UI + @react-three/fiber v9 + framer-motion + Phosphor Icons + i18n (EN/KN).
+- **PWA**: manifest.json + service-worker.js (production only).
+- **SEO**: React 19 native head hoisting via `<Seo />`, LocalBusiness JSON-LD, robots.txt + sitemap.xml (PUBLIC_URL canonical), admin-configurable Google Analytics + Search Console verification.
 
-## Implemented Features
-### Iteration 1 (MVP)
-- ✅ Fortune-500 dark navy + gold theme; Three.js hero (gold ingot + orbiting shards + truck chassis)
-- ✅ Live scrap prices (30 items), search/filter/sort/auto-refresh, printable, scrolling ticker
-- ✅ 35 services with cards & search
-- ✅ Gallery masonry + lightbox
-- ✅ Pickup request form with media upload (object storage)
-- ✅ Contact page with office + godown addresses, Google Maps embed
-- ✅ Floating contact bar (Call/WhatsApp/Email/Maps/Back-to-Top)
-- ✅ Newsletter, JWT admin login, Admin CMS (7 tabs incl. Business Info, Prices, Services, Gallery, Testimonials, FAQ, Pickups)
-- ✅ CSV / Excel import-export for prices
+## DB Collections
+`users` · `business_info` (singleton, incl. extra_phones/whatsapps/emails/additional_addresses + google_analytics_id + google_search_console_verification) · `prices` · `services` · `testimonials` · `faqs` · `gallery` · `pickups` · `projects` · `newsletter` · `login_attempts` · `password_reset_tokens` (TTL) · `settings` (seed version)
 
-### Iteration 2 (P1) — 2026-07-01
-- ✅ Updated all scrap prices to **Jan 2026 rates** via idempotent v2 migration
-- ✅ Seeded 8 demo gallery items (Unsplash/Pexels)
-- ✅ **Multiple contact numbers/addresses/emails** (extra_phones, extra_whatsapps, extra_emails, additional_addresses arrays)
-- ✅ Added `+91 8310064128` as extra phone/WhatsApp; Admin can add/remove any of them via new Business Info editors
-- ✅ **Multi-language toggle (EN / KN Kannada)** with `<I18nProvider>` + navbar `<Translate>` button, persists in localStorage
-- ✅ **AI Chat / Instant Quote assistant** — floating widget above contact bar, uses Emergent LLM key (openai gpt-5.4-mini). System prompt injects live scrap prices + business info; multi-turn session persistence via `session_id`
-- ✅ **SEO**: `<Seo />` component per route (title / description / OG / Twitter / canonical / robots), `<LocalBusinessSchema />` JSON-LD on Home, `/robots.txt` (via `/api` + static), `/sitemap.xml` (via `/api` + static) with `PUBLIC_URL` canonical https base
-- ✅ **Brute-force lockout** — 5 wrong passwords per email → 15-min lockout, keyed by email (IP-rotation-safe)
-- ✅ **Rate limits (slowapi + X-Forwarded-For real client IP)**: login 10/min, newsletter 5/hour, pickup 10/hour, ai chat 20/min
-- ✅ Rebrand: "India's Trusted" removed; hero shows **"Karnataka's Premium Scrap Dealer"**; all "scrap recycler/recycling" → "scrap dealer"; stats reduced to 3 (Happy Clients / Years / Locations)
-- ✅ Admin Gallery correctly renders both uploaded and URL-based items
+## Implemented (through Iteration 3 — 2026-07-01)
+- Iter 1 MVP: hero + 3D scene, live prices, services, gallery, pickup form, contact, floating bar, admin CMS, CSV import/export
+- Iter 2 P1: multi-contact, EN/KN i18n, AI chat, SEO, brute-force lockout, rate limits, rebrand
+- **Iter 3 P1 (this iteration)**:
+  - ✅ **PWA** — manifest.json (installable) + service worker (offline shell) + apple-touch-icon + theme-color
+  - ✅ **Google Analytics** + **Search Console verification** — admin-editable via Business Info (`google_analytics_id`, `google_search_console_verification`); auto-injected by `useAnalytics()` hook
+  - ✅ **Downloadable PDF brochure** — `/api/brochure.pdf` (reportlab, gold-navy branded, includes services + live prices + contacts) with footer button
+  - ✅ **Projects section** — `/projects` page + admin CRUD tab with title/description/location/customer/completion_date/image
+  - ✅ **Password reset flow** — `/api/auth/forgot-password` + `/api/auth/reset-password` + `/forgot-password` + `/reset-password` pages; token single-use, 1-hour expiry, Mongo TTL cleanup
+  - ✅ **Admin change-password** — `/api/auth/change-password` + Security tab in admin
+  - ✅ **Async httpx storage IO** — `aput_object` / `aget_object` for gallery/pickup uploads and file serving; no more sync `requests` blocking the event loop
 
-## Backlog / Deferred
-### P1 (next)
-- PWA — installable mobile app + service worker + offline shell
-- Google Analytics + Search Console verification
-- Voice search + smart search
-- Before/After image slider in gallery
-- Projects section (with location, customer, completion date)
-- Backup / Restore / full DB Export-Import from admin
-- Password reset flow
-- Downloadable company brochure (PDF generator)
-- Native "Share Website" via Web Share API + print scrap price list refinements
+## Backlog
+### P1
+- Wire real email delivery (SendGrid/Resend) so `/forgot-password` sends actual emails
+- Migrate reportlab brochure generation to `asyncio.to_thread()` for higher concurrency
+- Split `server.py` (~1360 lines) into `routers/`, `models/`, `services/`
+- Add server-side format validation for GA ID (`^G-[A-Z0-9]+$`) and GSC token
+- Downloadable print-optimized scrap price PDF
 
 ### P2
-- Migrate object storage IO from sync `requests` → `httpx.AsyncClient`
-- Split server.py (~1080 lines) into routers/models/seed modules
-- Global IP-based enumeration backoff on top of per-email lockout
-- Google Reviews embed / live news block on home
+- Google Reviews embed, live news, before/after slider, voice search, native Share API
 
-## Deployment (Hostinger)
-1. `cd frontend && yarn build` → serve `build/` via Hostinger static hosting or nginx
-2. Deploy FastAPI (`uvicorn server:app --host 0.0.0.0 --port 8001`) on a VPS or Hostinger Cloud
-3. Hosted MongoDB (Atlas) → `MONGO_URL`
-4. Set `EMERGENT_LLM_KEY` for object storage + AI chat
-5. Set `PUBLIC_URL="https://your-domain.com"` for canonical sitemap URLs
-6. Update `REACT_APP_BACKEND_URL` and rebuild frontend
-7. Point domain `A`/`CNAME` at Hostinger; make sure ingress passes `X-Forwarded-For` header for correct rate limiting
+## Deployment (Hostinger + custom domain)
+1. `cd /app/frontend && yarn build` → serve `build/` via Hostinger static / nginx
+2. Deploy FastAPI (`uvicorn server:app --host 0.0.0.0 --port 8001`) on Hostinger VPS
+3. Set backend env: `MONGO_URL`, `DB_NAME`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `EMERGENT_LLM_KEY`, `PUBLIC_URL=https://your-domain.com`, `CORS_ORIGINS=https://your-domain.com`
+4. Set frontend env: `REACT_APP_BACKEND_URL=https://api.your-domain.com` (or same domain with `/api` path), then rebuild
+5. Point A/CNAME records at Hostinger. Ensure ingress passes `X-Forwarded-For` header (rate-limits + brute-force lockout depend on it).
+6. Admin → Business Info → paste your **Google Analytics ID** and **Search Console verification** value (no code change needed).

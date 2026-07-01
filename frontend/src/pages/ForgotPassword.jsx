@@ -64,12 +64,16 @@ export default function ForgotPassword() {
                   </p>
                 </div>
                 {devLink && (
-                  <div className="p-4 border border-[#D4AF37]/50 bg-[#D4AF37]/5" data-testid="forgot-dev-link">
+                  <div className="p-4 border border-[#D4AF37]/50 bg-[#D4AF37]/5">
                     <div className="text-[10px] uppercase tracking-widest text-[#D4AF37] mb-2">Dev Reset Link</div>
                     <p className="text-xs text-[#94A3B8] mb-3">
                       Email delivery isn't configured. Use this link to reset now:
                     </p>
-                    <a href={devLink} className="text-[#D4AF37] hover:text-[#F0C420] break-all text-xs underline">
+                    <a
+                      href={devLink}
+                      data-testid="forgot-dev-link"
+                      className="text-[#D4AF37] hover:text-[#F0C420] break-all text-xs underline"
+                    >
                       {devLink}
                     </a>
                   </div>
