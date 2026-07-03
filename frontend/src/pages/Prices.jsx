@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
-import { CaretUp, CaretDown, MagnifyingGlass, Printer, Clock } from "@phosphor-icons/react";
+import { CaretUp, CaretDown, MagnifyingGlass, Printer, Clock, BellRinging, WhatsappLogo } from "@phosphor-icons/react";
+import { toast } from "sonner";
 import Seo from "../components/Seo";
 
 export default function Prices() {
@@ -48,7 +49,7 @@ export default function Prices() {
         <div className="flex items-end justify-between flex-wrap gap-6 mb-10">
           <div>
             <div className="text-xs uppercase tracking-[0.24em] text-[#D4AF37] mb-3">Live Market · Auto-refreshing</div>
-            <h1 className="font-display text-4xl sm:text-5xl text-white leading-tight">Today's Scrap Prices</h1>
+            <h1 className="font-display text-4xl sm:text-5xl text-white leading-tight">Today&apos;s Scrap Prices</h1>
             {lastUpdated && (
               <div className="mt-3 flex items-center gap-2 text-xs text-[#94A3B8]">
                 <Clock size={14} /> Last updated {new Date(lastUpdated).toLocaleString("en-IN")}
@@ -140,6 +141,129 @@ export default function Prices() {
         <p className="text-xs text-[#94A3B8] mt-6 max-w-3xl">
           Disclaimer: Prices are indicative and updated daily by our team based on prevailing market rates. Final rate depends on scrap quality, quantity, and moisture content. Call us for confirmed quotes on large lots.
         </p>
+
+        <PriceAlertOptIn categories={categories.filter((c) => c !== "All")} />
+      </div>
+    </div>
+  );
+}
+
+function PriceAlertOptIn({ categories }) {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [selected, setSelected] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const toggleMetal = (m) => {
+    setSelected((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 10) {
+      toast.error("Please enter a valid 10-digit phone number.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.post("/price-alerts", { name: name.trim(), phone: digits, metals: selected });
+      toast.success("You're subscribed! We'll WhatsApp you when prices move.");
+      setDone(true);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Failed to subscribe. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (done) {
+    return (
+      <div className="mt-12 glass-card sharp p-8 text-center" data-testid="price-alert-success">
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-[#D4AF37]/15 text-[#D4AF37] mb-4">
+          <WhatsappLogo size={28} weight="fill" />
+        </div>
+        <h3 className="font-display text-2xl text-white mb-2">You&apos;re on the list</h3>
+        <p className="text-sm text-[#94A3B8] max-w-md mx-auto">
+          Our team will reach out on WhatsApp with today&apos;s rates and notify you when your selected metals see a big move.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-14 glass-card sharp p-8 lg:p-10" data-testid="price-alert-form">
+      <div className="grid lg:grid-cols-[1fr_1.4fr] gap-8 items-start">
+        <div>
+          <div className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-[#D4AF37] mb-3">
+            <BellRinging size={14} weight="fill" /> Free WhatsApp Alerts
+          </div>
+          <h3 className="font-display text-3xl text-white leading-tight mb-3">
+            Never miss a price spike again
+          </h3>
+          <p className="text-sm text-[#94A3B8] leading-relaxed">
+            Get a WhatsApp ping the moment copper, aluminium, brass or your chosen metals move sharply. No spam — only when it matters. You can opt out any time.
+          </p>
+        </div>
+
+        <form onSubmit={submit} className="space-y-4">
+          <div className="grid sm:grid-cols-2 gap-3">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name (optional)"
+              className="w-full px-4 py-3 bg-[#060B14] border border-white/10 text-white sharp focus:border-[#D4AF37] outline-none text-sm"
+              data-testid="price-alert-name-input"
+            />
+            <input
+              type="tel"
+              required
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="WhatsApp number (10 digits)"
+              className="w-full px-4 py-3 bg-[#060B14] border border-white/10 text-white sharp focus:border-[#D4AF37] outline-none text-sm"
+              data-testid="price-alert-phone-input"
+            />
+          </div>
+
+          {categories.length > 0 && (
+            <div>
+              <div className="text-xs uppercase tracking-widest text-[#94A3B8] mb-2">Alert me on (optional)</div>
+              <div className="flex flex-wrap gap-2">
+                {categories.map((c) => {
+                  const active = selected.includes(c);
+                  return (
+                    <button
+                      type="button"
+                      key={c}
+                      onClick={() => toggleMetal(c)}
+                      className={`px-3 py-1.5 sharp text-xs border transition ${active ? "bg-[#D4AF37] text-[#0B0F1A] border-[#D4AF37] font-semibold" : "border-white/15 text-[#CBD5E1] hover:border-[#D4AF37]/60"}`}
+                      data-testid={`price-alert-metal-${c.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full sm:w-auto inline-flex items-center gap-2 px-6 py-3 bg-[#D4AF37] text-[#0B0F1A] font-semibold sharp hover:bg-[#e6c34a] transition disabled:opacity-50"
+            data-testid="price-alert-submit-btn"
+          >
+            <WhatsappLogo size={18} weight="fill" />
+            {submitting ? "Subscribing…" : "Get WhatsApp Alerts"}
+          </button>
+
+          <p className="text-[10px] uppercase tracking-widest text-[#64748B]">
+            We respect your privacy. No spam, unsubscribe anytime.
+          </p>
+        </form>
       </div>
     </div>
   );

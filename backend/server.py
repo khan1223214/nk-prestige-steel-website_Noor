@@ -420,6 +420,12 @@ class NewsletterIn(BaseModel):
     email: EmailStr
 
 
+class PriceAlertIn(BaseModel):
+    name: Optional[str] = None
+    phone: str = Field(..., min_length=6, max_length=20)
+    metals: List[str] = []  # e.g. ["Copper", "Aluminium", "Brass"]
+
+
 # ------------- Auth Routes -------------
 def _client_ip(request: Request) -> str:
     return _real_client_ip(request)
@@ -805,6 +811,52 @@ async def newsletter(request: Request, body: NewsletterIn):
         {"$set": {"email": body.email.lower(), "created_at": now_iso()}},
         upsert=True,
     )
+    return {"ok": True}
+
+
+# ------------- Price Alerts (WhatsApp) -------------
+def _normalize_phone(raw: str) -> str:
+    # Keep digits only; strip country code duplicates
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if digits.startswith("0"):
+        digits = digits.lstrip("0")
+    return digits
+
+
+@api_router.post("/price-alerts")
+@limiter.limit("5/hour")
+async def create_price_alert(request: Request, body: PriceAlertIn):
+    phone = _normalize_phone(body.phone)
+    if len(phone) < 10:
+        raise HTTPException(status_code=400, detail="Please enter a valid phone number")
+    await db.price_alerts.update_one(
+        {"phone": phone},
+        {"$set": {
+            "phone": phone,
+            "name": (body.name or "").strip(),
+            "metals": body.metals,
+            "updated_at": now_iso(),
+        }, "$setOnInsert": {"created_at": now_iso()}},
+        upsert=True,
+    )
+    return {"ok": True, "message": "You'll receive WhatsApp alerts when prices change."}
+
+
+@api_router.get("/price-alerts")
+async def list_price_alerts(admin=Depends(get_current_admin)):
+    docs = await db.price_alerts.find({}).sort("created_at", -1).to_list(1000)
+    return [{
+        "id": str(d.get("_id")),
+        "name": d.get("name", ""),
+        "phone": d["phone"],
+        "metals": d.get("metals", []),
+        "created_at": d.get("created_at"),
+    } for d in docs]
+
+
+@api_router.delete("/price-alerts/{phone}")
+async def delete_price_alert(phone: str, admin=Depends(get_current_admin)):
+    await db.price_alerts.delete_one({"phone": _normalize_phone(phone)})
     return {"ok": True}
 
 

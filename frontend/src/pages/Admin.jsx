@@ -7,7 +7,7 @@ import SortableGalleryGrid from "../components/SortableGalleryGrid";
 import {
   SignOut, CurrencyInr, Wrench, Images, ChatCircleDots, Question, Buildings, Truck, Briefcase,
   PencilSimple, Trash, Plus, UploadSimple, DownloadSimple, X, Check, ArrowSquareOut, Key,
-  Wallet, ArrowUp, ArrowDown, Database,
+  Wallet, ArrowUp, ArrowDown, Database, BellRinging, WhatsappLogo,
 } from "@phosphor-icons/react";
 
 const TABS = [
@@ -20,6 +20,7 @@ const TABS = [
   { key: "testimonials", label: "Testimonials", icon: <ChatCircleDots size={16} /> },
   { key: "faqs", label: "FAQ", icon: <Question size={16} /> },
   { key: "pickups", label: "Pickup Requests", icon: <Truck size={16} /> },
+  { key: "alerts", label: "Price Alerts", icon: <BellRinging size={16} /> },
   { key: "backup", label: "Backup / Restore", icon: <Database size={16} /> },
   { key: "security", label: "Change Password", icon: <Key size={16} /> },
 ];
@@ -106,6 +107,7 @@ export default function Admin() {
           {tab === "testimonials" && <TestimonialsTab />}
           {tab === "faqs" && <FaqsTab />}
           {tab === "pickups" && <PickupsTab />}
+          {tab === "alerts" && <PriceAlertsTab />}
           {tab === "backup" && <BackupTab />}
           {tab === "security" && <SecurityTab />}
         </div>
@@ -1050,5 +1052,106 @@ function InputAStyles() {
       }
       .input-a:focus { border-color: #D4AF37; }
     `}</style>
+  );
+}
+
+function PriceAlertsTab() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = () => {
+    setLoading(true);
+    api.get("/price-alerts").then((r) => {
+      setRows(r.data);
+      setLoading(false);
+    });
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const remove = async (phone) => {
+    if (!window.confirm("Remove this subscriber?")) return;
+    await api.delete(`/price-alerts/${encodeURIComponent(phone)}`);
+    toast.success("Subscriber removed");
+    load();
+  };
+
+  const waLink = (phone, name) => {
+    const msg = encodeURIComponent(`Hi ${name || "there"}, today's scrap rates from NK Prestige Steel:`);
+    return `https://wa.me/91${phone}?text=${msg}`;
+  };
+
+  return (
+    <div>
+      <SectionHeader
+        title="WhatsApp Price Alerts"
+        subtitle="Subscribers who opted in from the Prices page. Click ‘Message on WhatsApp’ to send them today's rates in one click."
+      />
+      {loading ? (
+        <p className="text-[#94A3B8]">Loading…</p>
+      ) : rows.length === 0 ? (
+        <div className="glass-card sharp p-10 text-center">
+          <BellRinging size={28} className="mx-auto text-[#D4AF37] mb-3" />
+          <p className="text-white/80 mb-1">No subscribers yet</p>
+          <p className="text-xs text-[#94A3B8]">They'll appear here as soon as customers opt in from the Prices page.</p>
+        </div>
+      ) : (
+        <div className="glass-card sharp overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="text-left">
+                  {["Name", "Phone", "Alert Metals", "Subscribed", "Actions"].map((h) => (
+                    <th key={h} className="px-6 py-4 text-xs uppercase tracking-widest text-[#94A3B8] border-b border-white/5">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.phone} className="border-b border-white/5 align-top" data-testid={`price-alert-row-${r.phone}`}>
+                    <td className="px-6 py-4 text-white">{r.name || <span className="text-[#94A3B8]">—</span>}</td>
+                    <td className="px-6 py-4 text-[#D4AF37] font-mono">+91 {r.phone}</td>
+                    <td className="px-6 py-4">
+                      {r.metals?.length ? (
+                        <div className="flex flex-wrap gap-1">
+                          {r.metals.map((m) => (
+                            <span key={m} className="text-[10px] uppercase tracking-widest px-2 py-1 border border-white/10 text-white/70 sharp">{m}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-[#94A3B8] text-xs">All metals</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-[#94A3B8] text-xs">
+                      {r.created_at ? new Date(r.created_at).toLocaleString("en-IN") : "—"}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={waLink(r.phone, r.name)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#25D366] text-white sharp text-xs font-semibold hover:opacity-90"
+                          data-testid={`price-alert-wa-${r.phone}`}
+                        >
+                          <WhatsappLogo size={14} weight="fill" /> Message
+                        </a>
+                        <button
+                          onClick={() => remove(r.phone)}
+                          className="p-2 border border-white/10 text-white/70 hover:text-red-400 hover:border-red-400/40 sharp"
+                          data-testid={`price-alert-delete-${r.phone}`}
+                        >
+                          <Trash size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
