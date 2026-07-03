@@ -30,5 +30,30 @@ export function useAnalytics(info) {
       m.content = verify;
       document.head.appendChild(m);
     }
+
+    // SEO keywords (dynamic)
+    const kw = (info.seo_keywords || "").trim();
+    if (kw) {
+      let el = document.querySelector('meta[name="keywords"]');
+      if (!el) {
+        el = document.createElement("meta");
+        el.name = "keywords";
+        document.head.appendChild(el);
+      }
+      el.content = kw;
+    }
+
+    // Favicon (dynamic override)
+    const fav = (info.favicon_url || "").trim();
+    if (fav) {
+      const href = fav.startsWith("http") ? fav : `${process.env.REACT_APP_BACKEND_URL}/api/files/${fav}`;
+      let el = document.querySelector('link[rel="icon"]');
+      if (!el) {
+        el = document.createElement("link");
+        el.rel = "icon";
+        document.head.appendChild(el);
+      }
+      el.href = href;
+    }
   }, [info]);
 }

@@ -106,11 +106,22 @@ export default function Home({ info }) {
             </div>
           </motion.div>
 
-          {/* 3D scene */}
+          {/* 3D scene or admin-uploaded hero image */}
           <div className="relative h-[420px] sm:h-[520px] lg:h-[640px]">
-            <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[#94A3B8]">Loading 3D…</div>}>
-              <Hero3D />
-            </Suspense>
+            {info?.hero_image_url ? (
+              <div className="relative w-full h-full overflow-hidden sharp">
+                <img
+                  src={info.hero_image_url.startsWith("http") ? info.hero_image_url : `${process.env.REACT_APP_BACKEND_URL}/api/files/${info.hero_image_url}`}
+                  alt="Hero"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#060B14] via-transparent to-transparent" />
+              </div>
+            ) : (
+              <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[#94A3B8]">Loading 3D…</div>}>
+                <Hero3D />
+              </Suspense>
+            )}
             {/* Bottom highlight */}
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] uppercase tracking-[0.32em] text-[#94A3B8]">
               Interactive · Ferrous · Non-Ferrous · E-Waste

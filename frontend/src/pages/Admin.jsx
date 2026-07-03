@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   SignOut, CurrencyInr, Wrench, Images, ChatCircleDots, Question, Buildings, Truck, Briefcase,
   PencilSimple, Trash, Plus, UploadSimple, DownloadSimple, X, Check, ArrowSquareOut, Key,
+  Wallet, ArrowUp, ArrowDown, Database,
 } from "@phosphor-icons/react";
 
 const TABS = [
@@ -14,9 +15,11 @@ const TABS = [
   { key: "services", label: "Services", icon: <Wrench size={16} /> },
   { key: "projects", label: "Projects", icon: <Briefcase size={16} /> },
   { key: "gallery", label: "Gallery", icon: <Images size={16} /> },
+  { key: "payments", label: "Payment Methods", icon: <Wallet size={16} /> },
   { key: "testimonials", label: "Testimonials", icon: <ChatCircleDots size={16} /> },
   { key: "faqs", label: "FAQ", icon: <Question size={16} /> },
   { key: "pickups", label: "Pickup Requests", icon: <Truck size={16} /> },
+  { key: "backup", label: "Backup / Restore", icon: <Database size={16} /> },
   { key: "security", label: "Change Password", icon: <Key size={16} /> },
 ];
 
@@ -98,9 +101,11 @@ export default function Admin() {
           {tab === "services" && <ServicesTab />}
           {tab === "projects" && <ProjectsTab />}
           {tab === "gallery" && <GalleryTab />}
+          {tab === "payments" && <PaymentsTab />}
           {tab === "testimonials" && <TestimonialsTab />}
           {tab === "faqs" && <FaqsTab />}
           {tab === "pickups" && <PickupsTab />}
+          {tab === "backup" && <BackupTab />}
           {tab === "security" && <SecurityTab />}
         </div>
       </main>
@@ -165,6 +170,13 @@ function BusinessInfoTab() {
     ["twitter", "Twitter URL"], ["youtube", "YouTube URL"],
     ["google_analytics_id", "Google Analytics ID (G-XXXXXXX)"],
     ["google_search_console_verification", "GSC Verification (meta content)"],
+    ["seo_keywords", "SEO Keywords (comma-separated)"],
+    ["favicon_url", "Favicon URL"],
+    ["hero_image_url", "Hero Background Image URL (optional — replaces 3D scene)"],
+    ["hero_cta_primary_label", "Hero CTA #1 Label"],
+    ["hero_cta_primary_url", "Hero CTA #1 URL (tel:, https://, /path)"],
+    ["hero_cta_secondary_label", "Hero CTA #2 Label"],
+    ["hero_cta_secondary_url", "Hero CTA #2 URL"],
   ];
 
   const ListEditor = ({ label, k, placeholder }) => (
@@ -485,6 +497,216 @@ function ProjectsTab() {
   );
 }
 
+// -------------------- Payment Methods --------------------
+function PaymentsTab() {
+  const KINDS = ["UPI", "BANK", "NEFT", "RTGS", "CASH", "CHEQUE", "OTHER"];
+  const [items, setItems] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const blank = { kind: "UPI", label: "", details: "", qr_image_url: "", enabled: true, order: 0 };
+
+  const load = () => api.get("/payment-methods").then((r) => setItems(r.data));
+  useEffect(() => { load(); }, []);
+
+  const uploadQr = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("file", f);
+    try {
+      const { data } = await api.post("/upload-image?folder=payments", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setEditing((prev) => ({ ...prev, qr_image_url: data.path }));
+      toast.success("QR uploaded");
+    } catch { toast.error("Upload failed"); }
+    setUploading(false);
+    e.target.value = "";
+  };
+
+  const save = async () => {
+    const payload = {
+      kind: editing.kind, label: editing.label, details: editing.details || "",
+      qr_image_url: editing.qr_image_url || null,
+      enabled: !!editing.enabled, order: Number(editing.order || 0),
+    };
+    try {
+      if (editing.id) await api.put(`/payment-methods/${editing.id}`, payload);
+      else await api.post("/payment-methods", payload);
+      toast.success("Saved");
+      setEditing(null);
+      load();
+    } catch { toast.error("Save failed"); }
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm("Delete this payment method?")) return;
+    await api.delete(`/payment-methods/${id}`);
+    load();
+  };
+
+  return (
+    <div>
+      <SectionHeader
+        title="Payment Methods"
+        subtitle="Manage UPI, Bank, Cash, Cheque, NEFT, RTGS options shown on the /payments page."
+        action={<button onClick={() => setEditing({ ...blank })} className="btn-primary sharp text-xs" data-testid="payment-add-btn"><Plus size={14} weight="bold" /> Add Method</button>}
+      />
+
+      {editing && (
+        <div className="glass-card sharp p-6 mb-6" data-testid="payment-editor">
+          <div className="grid md:grid-cols-2 gap-4">
+            <label className="block">
+              <span className="block text-xs uppercase tracking-widest text-[#94A3B8] mb-2">Type</span>
+              <select value={editing.kind} onChange={(e) => setEditing({ ...editing, kind: e.target.value })} className="input-a">
+                {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-xs uppercase tracking-widest text-[#94A3B8] mb-2">Label</span>
+              <input value={editing.label} onChange={(e) => setEditing({ ...editing, label: e.target.value })} className="input-a" />
+            </label>
+            <label className="block md:col-span-2">
+              <span className="block text-xs uppercase tracking-widest text-[#94A3B8] mb-2">Details (multi-line: A/C, IFSC, UPI ID, etc.)</span>
+              <textarea rows={4} value={editing.details} onChange={(e) => setEditing({ ...editing, details: e.target.value })} className="input-a resize-none font-mono text-xs" />
+            </label>
+            <label className="block">
+              <span className="block text-xs uppercase tracking-widest text-[#94A3B8] mb-2">QR Image (optional)</span>
+              <input type="file" accept="image/*" onChange={uploadQr} className="text-xs text-[#94A3B8]" />
+              {uploading && <span className="text-xs text-[#D4AF37] block mt-1">Uploading…</span>}
+              {editing.qr_image_url && (
+                <div className="mt-2 flex items-center gap-2">
+                  <img src={editing.qr_image_url.startsWith("http") ? editing.qr_image_url : `${BACKEND_URL}/api/files/${editing.qr_image_url}`} alt="QR" className="w-20 h-20 object-contain bg-white p-1" />
+                  <button onClick={() => setEditing({ ...editing, qr_image_url: "" })} className="text-[#EF4444] text-xs">Remove</button>
+                </div>
+              )}
+            </label>
+            <label className="block">
+              <span className="block text-xs uppercase tracking-widest text-[#94A3B8] mb-2">Enabled</span>
+              <select value={editing.enabled ? "1" : "0"} onChange={(e) => setEditing({ ...editing, enabled: e.target.value === "1" })} className="input-a">
+                <option value="1">Yes — visible</option>
+                <option value="0">No — hidden</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-xs uppercase tracking-widest text-[#94A3B8] mb-2">Order</span>
+              <input type="number" value={editing.order} onChange={(e) => setEditing({ ...editing, order: e.target.value })} className="input-a" />
+            </label>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <button onClick={save} className="btn-primary sharp text-xs">Save</button>
+            <button onClick={() => setEditing(null)} className="btn-glass sharp text-xs">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {items.map((p) => (
+          <div key={p.id} className="glass-card sharp p-4 flex items-start gap-4" data-testid={`payment-row-${p.id}`}>
+            <div className="text-xs uppercase tracking-widest text-[#D4AF37] w-16 shrink-0">{p.kind}</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-white font-display">{p.label}</div>
+              <div className="text-[#94A3B8] text-xs mt-1 whitespace-pre-wrap font-mono">{p.details}</div>
+              <div className="text-[10px] text-[#94A3B8] mt-2">{p.enabled ? "✓ Visible" : "✗ Hidden"} · Order: {p.order}</div>
+            </div>
+            {p.qr_image_url && (
+              <img src={p.qr_image_url.startsWith("http") ? p.qr_image_url : `${BACKEND_URL}/api/files/${p.qr_image_url}`} alt="QR" className="w-14 h-14 bg-white p-0.5" />
+            )}
+            <div className="flex flex-col gap-2">
+              <button onClick={() => setEditing({ ...p })} className="text-[#D4AF37]"><PencilSimple size={16} /></button>
+              <button onClick={() => remove(p.id)} className="text-[#EF4444]"><Trash size={16} /></button>
+            </div>
+          </div>
+        ))}
+        {items.length === 0 && <p className="text-[#94A3B8]">No payment methods yet.</p>}
+      </div>
+      <InputAStyles />
+    </div>
+  );
+}
+
+// -------------------- Backup / Restore --------------------
+function BackupTab() {
+  const [busy, setBusy] = useState(false);
+  const [replace, setReplace] = useState(false);
+  const [restoreSummary, setRestoreSummary] = useState(null);
+
+  const download = async () => {
+    setBusy(true);
+    try {
+      const res = await api.get("/backup", { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `nk-prestige-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Backup downloaded");
+    } catch { toast.error("Backup failed"); }
+    setBusy(false);
+  };
+
+  const restore = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!window.confirm(replace ? "This will REPLACE all data. Continue?" : "Merge/upsert this backup into current data?")) {
+      e.target.value = "";
+      return;
+    }
+    setBusy(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const { data } = await api.post(`/restore?replace=${replace}`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setRestoreSummary(data.restored);
+      toast.success("Restore complete");
+    } catch { toast.error("Restore failed"); }
+    setBusy(false);
+    e.target.value = "";
+  };
+
+  return (
+    <div>
+      <SectionHeader title="Backup & Restore" subtitle="Full site data export/import — business info, prices, services, gallery, projects, payment methods, testimonials, FAQ, and pickup requests." />
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="glass-card sharp p-6">
+          <div className="text-[#D4AF37] mb-3"><DownloadSimple size={22} weight="duotone" /></div>
+          <h3 className="font-display text-white text-lg mb-1">Export Backup</h3>
+          <p className="text-[#94A3B8] text-sm mb-5">Downloads a versioned JSON snapshot of the entire site database. Save it somewhere safe.</p>
+          <button onClick={download} disabled={busy} className="btn-primary sharp text-xs" data-testid="backup-download-btn">
+            <DownloadSimple size={14} weight="bold" /> {busy ? "Preparing…" : "Download Backup"}
+          </button>
+        </div>
+
+        <div className="glass-card sharp p-6">
+          <div className="text-[#D4AF37] mb-3"><UploadSimple size={22} weight="duotone" /></div>
+          <h3 className="font-display text-white text-lg mb-1">Restore from Backup</h3>
+          <p className="text-[#94A3B8] text-sm mb-4">Upload a previously exported backup JSON to restore your site.</p>
+          <label className="flex items-center gap-2 text-xs text-[#94A3B8] mb-3">
+            <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} className="accent-[#D4AF37]" data-testid="backup-replace-toggle" />
+            Replace all data (danger — deletes current data first)
+          </label>
+          <label className="btn-glass sharp text-xs cursor-pointer inline-flex" data-testid="backup-restore-btn">
+            <UploadSimple size={14} /> Choose Backup File
+            <input type="file" accept=".json,application/json" className="hidden" onChange={restore} />
+          </label>
+          {restoreSummary && (
+            <div className="mt-4 text-xs text-[#94A3B8]" data-testid="restore-summary">
+              <div className="text-[#D4AF37] uppercase tracking-widest mb-1">Restored</div>
+              {Object.entries(restoreSummary).map(([c, n]) => (
+                <div key={c}>{c}: <span className="text-white">{n}</span> docs</div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // -------------------- Security / Change Password --------------------
 function SecurityTab() {
   const [current, setCurrent] = useState("");
@@ -645,7 +867,7 @@ function GalleryTab() {
       />
       {uploading && <p className="text-[#D4AF37] text-sm mb-4">Uploading…</p>}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {items.map((g) => {
+        {items.map((g, idx) => {
           const src = g.file_path?.startsWith("http") ? g.file_path : `${BACKEND_URL}/api/files/${g.file_path}`;
           return (
           <div key={g.id} className="glass-card sharp overflow-hidden group relative" data-testid={`gallery-admin-${g.id}`}>
@@ -655,6 +877,14 @@ function GalleryTab() {
               ) : (
                 <img src={src} alt="" className="w-full h-full object-cover" />
               )}
+            </div>
+            <div className="absolute top-1 left-1 flex flex-col gap-1">
+              <button onClick={() => move(idx, -1)} disabled={idx === 0} className="w-7 h-7 flex items-center justify-center bg-[#0A1128]/80 border border-white/10 text-[#D4AF37] disabled:opacity-40 hover:bg-[#D4AF37] hover:text-[#060B14]" data-testid={`gallery-up-${g.id}`}>
+                <ArrowUp size={14} weight="bold" />
+              </button>
+              <button onClick={() => move(idx, 1)} disabled={idx === items.length - 1} className="w-7 h-7 flex items-center justify-center bg-[#0A1128]/80 border border-white/10 text-[#D4AF37] disabled:opacity-40 hover:bg-[#D4AF37] hover:text-[#060B14]" data-testid={`gallery-down-${g.id}`}>
+                <ArrowDown size={14} weight="bold" />
+              </button>
             </div>
             <div className="p-3">
               <div className="text-xs text-white truncate">{g.title || "Untitled"}</div>

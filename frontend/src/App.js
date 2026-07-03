@@ -16,6 +16,7 @@ import Prices from "./pages/Prices";
 import Services from "./pages/Services";
 import Gallery from "./pages/Gallery";
 import Projects from "./pages/Projects";
+import Payments from "./pages/Payments";
 import Pickup from "./pages/Pickup";
 import Contact from "./pages/Contact";
 import Login from "./pages/Login";
@@ -65,6 +66,7 @@ function AppInner() {
         <Route path="/services" element={<Services />} />
         <Route path="/gallery" element={<Gallery />} />
         <Route path="/projects" element={<Projects />} />
+        <Route path="/payments" element={<Payments />} />
         <Route path="/pickup" element={<Pickup info={info} />} />
         <Route path="/contact" element={<Contact info={info} />} />
         <Route path="/login" element={<Login />} />

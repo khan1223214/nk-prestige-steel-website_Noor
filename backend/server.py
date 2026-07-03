@@ -355,8 +355,30 @@ class BusinessInfo(BaseModel):
     twitter: str = ""
     youtube: str = ""
     # SEO / analytics
-    google_analytics_id: str = ""  # e.g., G-XXXXXXX
-    google_search_console_verification: str = ""  # meta content only
+    google_analytics_id: str = ""
+    google_search_console_verification: str = ""
+    seo_keywords: str = "scrap dealer karnataka, scrap buyer ramanagara, copper scrap price, aluminium scrap, iron scrap, factory scrap, industrial dismantling"
+    favicon_url: str = ""
+    # Hero customization
+    hero_image_url: str = ""
+    hero_cta_primary_label: str = "Call Owner"
+    hero_cta_primary_url: str = ""
+    hero_cta_secondary_label: str = "Get Quote"
+    hero_cta_secondary_url: str = "/pickup"
+
+
+class PaymentMethodIn(BaseModel):
+    kind: str  # UPI | BANK | CASH | CHEQUE | NEFT | RTGS | OTHER
+    label: str
+    details: str = ""  # e.g., UPI ID, IFSC + account #, etc.
+    qr_image_url: Optional[str] = None
+    enabled: bool = True
+    order: int = 0
+
+
+class PaymentMethod(PaymentMethodIn):
+    id: str
+    created_at: str
 
 
 class ProjectIn(BaseModel):
@@ -1067,6 +1089,117 @@ async def brochure_pdf():
     )
 
 
+# ------------- Payment Methods -------------
+@api_router.get("/payment-methods", response_model=List[PaymentMethod])
+async def list_payment_methods(only_enabled: bool = False):
+    q = {"enabled": True} if only_enabled else {}
+    docs = await db.payment_methods.find(q, {"_id": 0}).sort("order", 1).to_list(200)
+    return [PaymentMethod(**d) for d in docs]
+
+
+@api_router.post("/payment-methods", response_model=PaymentMethod)
+async def create_payment_method(body: PaymentMethodIn, admin=Depends(get_current_admin)):
+    doc = body.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    doc["created_at"] = now_iso()
+    await db.payment_methods.insert_one(doc)
+    doc.pop("_id", None)
+    return PaymentMethod(**doc)
+
+
+@api_router.put("/payment-methods/{pid}", response_model=PaymentMethod)
+async def update_payment_method(pid: str, body: PaymentMethodIn, admin=Depends(get_current_admin)):
+    await db.payment_methods.update_one({"id": pid}, {"$set": body.model_dump()})
+    doc = await db.payment_methods.find_one({"id": pid}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Not found")
+    return PaymentMethod(**doc)
+
+
+@api_router.delete("/payment-methods/{pid}")
+async def delete_payment_method(pid: str, admin=Depends(get_current_admin)):
+    await db.payment_methods.delete_one({"id": pid})
+    return {"ok": True}
+
+
+# ------------- Generic Image Upload (QR / favicon / hero) -------------
+@api_router.post("/upload-image")
+async def upload_image(file: UploadFile = File(...), folder: str = "misc", admin=Depends(get_current_admin)):
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else "png"
+    content_type = file.content_type or "image/png"
+    path = f"{APP_NAME}/{folder}/{uuid.uuid4()}.{ext}"
+    data = await file.read()
+    await aput_object(path, data, content_type)
+    return {"path": path, "url": f"/api/files/{path}"}
+
+
+# ------------- Gallery Reorder -------------
+class ReorderIn(BaseModel):
+    ids: List[str]
+
+
+@api_router.post("/gallery/reorder")
+async def reorder_gallery(body: ReorderIn, admin=Depends(get_current_admin)):
+    for i, gid in enumerate(body.ids):
+        await db.gallery.update_one({"id": gid}, {"$set": {"order": i}})
+    return {"ok": True, "count": len(body.ids)}
+
+
+# ------------- Backup / Restore -------------
+BACKUP_COLLECTIONS = ["business_info", "prices", "services", "testimonials", "faqs", "gallery", "projects", "payment_methods", "pickups"]
+
+
+@api_router.get("/backup")
+async def backup(admin=Depends(get_current_admin)):
+    """Export full site data as a JSON file."""
+    dump = {"exported_at": now_iso(), "version": 1, "collections": {}}
+    for c in BACKUP_COLLECTIONS:
+        docs = await db[c].find({}, {"_id": 0}).to_list(10000)
+        dump["collections"][c] = docs
+    import json as _json
+    body = _json.dumps(dump, default=str, indent=2)
+    fname = f"nk-prestige-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@api_router.post("/restore")
+async def restore(file: UploadFile = File(...), replace: bool = False, admin=Depends(get_current_admin)):
+    """Import backup JSON. When replace=True, empties each collection first."""
+    import json as _json
+    raw = await file.read()
+    try:
+        dump = _json.loads(raw)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid backup file")
+    cols = dump.get("collections", {})
+    summary = {}
+    for c, docs in cols.items():
+        if c not in BACKUP_COLLECTIONS:
+            continue
+        if replace:
+            await db[c].delete_many({})
+        n = 0
+        for d in docs:
+            try:
+                if c == "business_info":
+                    d["_id"] = "singleton"
+                    await db[c].update_one({"_id": "singleton"}, {"$set": {k: v for k, v in d.items() if k != "_id"}}, upsert=True)
+                else:
+                    if "id" in d:
+                        await db[c].update_one({"id": d["id"]}, {"$set": d}, upsert=True)
+                    else:
+                        await db[c].insert_one(d)
+                n += 1
+            except Exception as e:
+                logger.warning(f"Restore skipped doc in {c}: {e}")
+        summary[c] = n
+    return {"ok": True, "restored": summary}
+
+
 # ------------- Seed / Startup -------------
 DEFAULT_SERVICES = [
     ("MS Scrap", "Mild Steel scrap of all grades, purchased at best market rates.", "Wrench"),
@@ -1254,6 +1387,29 @@ async def seed_data():
                 "visible": True,
             })
 
+    # Seed default payment methods
+    if await db.payment_methods.count_documents({}) == 0:
+        info = await db.business_info.find_one({"_id": "singleton"}) or {}
+        phone_no = (info.get("phone", "+91 9741309869") or "").replace(" ", "").replace("+", "")
+        defaults = [
+            ("UPI", "UPI (Google Pay / PhonePe / Paytm)", f"{phone_no}@paytm", True, 0),
+            ("BANK", "Bank Transfer (NEFT / RTGS / IMPS)", "Bank: SBI\nA/C: 3xxxxxxxx\nIFSC: SBIN0XXXXXX\nBranch: Ramanagara", True, 1),
+            ("CASH", "Cash on Pickup", "Available for small pickups; instant payment upon weighing.", True, 2),
+            ("CHEQUE", "Cheque / DD", "Payable to 'NK Prestige Steel Corporation'.", True, 3),
+        ]
+        for kind, label, details, enabled, order in defaults:
+            await db.payment_methods.insert_one({
+                "id": str(uuid.uuid4()),
+                "kind": kind,
+                "label": label,
+                "details": details,
+                "qr_image_url": None,
+                "enabled": enabled,
+                "order": order,
+                "created_at": now_iso(),
+            })
+        logger.info("Seeded default payment methods")
+
     # Migration v2: update to 2026 prices + add extra phone + seed demo gallery
     settings = await db.settings.find_one({"_id": "seed"}) or {}
     version = settings.get("version", 1)
@@ -1330,6 +1486,7 @@ async def on_startup():
         await db.gallery.create_index("id", unique=True)
         await db.pickups.create_index("id", unique=True)
         await db.projects.create_index("id", unique=True)
+        await db.payment_methods.create_index("id", unique=True)
         await db.password_reset_tokens.create_index("token", unique=True)
         await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
         await db.login_attempts.create_index("_id")
