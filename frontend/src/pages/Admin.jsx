@@ -3,6 +3,7 @@ import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { api, BACKEND_URL } from "../lib/api";
 import { toast } from "sonner";
+import SortableGalleryGrid from "../components/SortableGalleryGrid";
 import {
   SignOut, CurrencyInr, Wrench, Images, ChatCircleDots, Question, Buildings, Truck, Briefcase,
   PencilSimple, Trash, Plus, UploadSimple, DownloadSimple, X, Check, ArrowSquareOut, Key,
@@ -835,21 +836,11 @@ function GalleryTab() {
     load();
   };
 
-  const toggleVisible = async (g) => {
-    await api.put(`/gallery/${g.id}`, { ...g, visible: !g.visible });
-    load();
-  };
-  const remove = async (id) => {
-    if (!window.confirm("Delete this item?")) return;
-    await api.delete(`/gallery/${id}`);
-    load();
-  };
-
   return (
     <div>
       <SectionHeader
         title="Gallery"
-        subtitle="Upload unlimited photos and videos."
+        subtitle="Upload unlimited photos and videos. Drag any tile by its handle to reorder — the order updates instantly on the public site."
         action={
           <div className="flex gap-2 items-center">
             <input
@@ -866,41 +857,7 @@ function GalleryTab() {
         }
       />
       {uploading && <p className="text-[#D4AF37] text-sm mb-4">Uploading…</p>}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {items.map((g, idx) => {
-          const src = g.file_path?.startsWith("http") ? g.file_path : `${BACKEND_URL}/api/files/${g.file_path}`;
-          return (
-          <div key={g.id} className="glass-card sharp overflow-hidden group relative" data-testid={`gallery-admin-${g.id}`}>
-            <div className="aspect-square">
-              {g.media_type === "video" ? (
-                <video src={src} className="w-full h-full object-cover" />
-              ) : (
-                <img src={src} alt="" className="w-full h-full object-cover" />
-              )}
-            </div>
-            <div className="absolute top-1 left-1 flex flex-col gap-1">
-              <button onClick={() => move(idx, -1)} disabled={idx === 0} className="w-7 h-7 flex items-center justify-center bg-[#0A1128]/80 border border-white/10 text-[#D4AF37] disabled:opacity-40 hover:bg-[#D4AF37] hover:text-[#060B14]" data-testid={`gallery-up-${g.id}`}>
-                <ArrowUp size={14} weight="bold" />
-              </button>
-              <button onClick={() => move(idx, 1)} disabled={idx === items.length - 1} className="w-7 h-7 flex items-center justify-center bg-[#0A1128]/80 border border-white/10 text-[#D4AF37] disabled:opacity-40 hover:bg-[#D4AF37] hover:text-[#060B14]" data-testid={`gallery-down-${g.id}`}>
-                <ArrowDown size={14} weight="bold" />
-              </button>
-            </div>
-            <div className="p-3">
-              <div className="text-xs text-white truncate">{g.title || "Untitled"}</div>
-              <div className="text-[10px] text-[#94A3B8]">{g.category}</div>
-              <div className="flex justify-between mt-2">
-                <button onClick={() => toggleVisible(g)} className="text-[10px] text-[#D4AF37]">
-                  {g.visible ? "Visible ✓" : "Hidden ✗"}
-                </button>
-                <button onClick={() => remove(g.id)} className="text-[#EF4444]"><Trash size={14} /></button>
-              </div>
-            </div>
-          </div>
-          );
-        })}
-        {items.length === 0 && <p className="text-[#94A3B8] col-span-full">No gallery items yet — upload some!</p>}
-      </div>
+      <SortableGalleryGrid items={items} setItems={setItems} />
     </div>
   );
 }

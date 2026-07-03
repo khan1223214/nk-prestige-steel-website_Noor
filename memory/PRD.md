@@ -42,6 +42,16 @@ Iter 1 MVP · Iter 2 P1 (contacts + i18n + AI chat + SEO + security) · Iter 3 P
 - Google Reviews embed, live news, before/after slider, voice search, native Share API
 - Migrate reportlab PDF gen to `asyncio.to_thread()` for higher concurrency
 
+### Iteration 5 (2026-07-03)
+- ✅ **Resend email integration** — `_send_reset_email()` sends a branded gold-on-navy HTML email via Resend when `RESEND_API_KEY` is set in `backend/.env`. Falls back to `debug_link` in response (dev mode) when key missing. `RESEND_FROM` defaults to `NK Prestige Steel <onboarding@resend.dev>` (Resend sandbox — works out of the box to admin's own email).
+- ✅ **Drag-and-drop gallery** — replaced up/down arrows with **@dnd-kit** (PointerSensor + KeyboardSensor for accessibility). New `SortableGalleryGrid` component with dedicated drag-handle overlay (`⋮⋮`), persists order via existing `POST /api/gallery/reorder` on drop.
+
+### Deployment note (Resend)
+1. Sign up at https://resend.com (free — 3,000/month, 100/day).
+2. Create an API key → set `RESEND_API_KEY=re_xxx` in `backend/.env`.
+3. For production, verify `nkprestigesteel.com` in Resend (add 3 DNS records at Hostinger) → set `RESEND_FROM="NK Prestige Steel <no-reply@nkprestigesteel.com>"`.
+4. Restart the backend (`sudo supervisorctl restart backend`). No code changes needed — `/api/auth/forgot-password` will start delivering real emails.
+
 ## Deployment (Hostinger + nkprestigesteel.com)
 1. `cd /app/frontend && yarn build` → serve `build/` via Hostinger static / nginx
 2. Deploy FastAPI (`uvicorn server:app --host 0.0.0.0 --port 8001`) on Hostinger VPS

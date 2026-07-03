@@ -12,6 +12,7 @@ import bcrypt
 import jwt as pyjwt
 import requests
 import httpx
+import resend as resend_sdk
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
@@ -47,6 +48,10 @@ ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@nkprestigesteel.com')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'NK@Prestige2026')
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
 APP_NAME = os.environ.get('APP_NAME', 'nk-prestige-steel')
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '').strip()
+RESEND_FROM = os.environ.get('RESEND_FROM', 'NK Prestige Steel <onboarding@resend.dev>')
+if RESEND_API_KEY:
+    resend_sdk.api_key = RESEND_API_KEY
 
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
 
@@ -890,6 +895,38 @@ async def sitemap(request: Request):
     return Response(content=xml, media_type="application/xml")
 
 
+def _send_reset_email(to_email: str, reset_link: str, business_name: str = "NK Prestige Steel") -> bool:
+    """Send password-reset email via Resend. Returns True on success, False otherwise."""
+    if not RESEND_API_KEY:
+        return False
+    try:
+        html = f"""
+        <div style="font-family: 'Manrope', Arial, sans-serif; background: #060B14; color: #fff; padding: 32px; max-width: 560px; margin: 0 auto;">
+          <div style="background: linear-gradient(135deg, #D4AF37 0%, #8a6f18 100%); padding: 20px; margin-bottom: 24px;">
+            <h1 style="margin:0; color:#060B14; font-size: 22px; letter-spacing: -0.02em;">{business_name}</h1>
+          </div>
+          <h2 style="color:#D4AF37; font-size: 18px; letter-spacing:0.02em; text-transform:uppercase;">Password reset requested</h2>
+          <p style="color:#94A3B8; line-height:1.6;">Hi Admin,<br/>We received a request to reset your admin password. Click the button below to choose a new one. This link is valid for <b>1 hour</b>.</p>
+          <div style="margin: 28px 0;">
+            <a href="{reset_link}" style="background:#D4AF37; color:#060B14; padding: 14px 28px; text-decoration:none; font-weight:600; letter-spacing:0.02em; text-transform:uppercase;">Reset Password</a>
+          </div>
+          <p style="color:#94A3B8; font-size:12px; line-height:1.6;">If you didn't request this, please ignore this email — your password will stay the same.<br/>Or copy and paste this link into your browser:<br/><span style="color:#D4AF37; word-break:break-all;">{reset_link}</span></p>
+          <hr style="border:none; border-top:1px solid rgba(255,255,255,0.1); margin: 32px 0;" />
+          <p style="color:#94A3B8; font-size:11px;">Sent by {business_name} · This is an automated message.</p>
+        </div>
+        """
+        resend_sdk.Emails.send({
+            "from": RESEND_FROM,
+            "to": [to_email],
+            "subject": f"Reset your {business_name} admin password",
+            "html": html,
+        })
+        return True
+    except Exception as e:
+        logger.error(f"Resend send failed: {e}")
+        return False
+
+
 @api_router.post("/auth/forgot-password")
 @limiter.limit("5/hour")
 async def forgot_password(request: Request, body: ForgotPasswordIn):
@@ -909,7 +946,19 @@ async def forgot_password(request: Request, body: ForgotPasswordIn):
     })
     reset_link = f"{os.environ.get('PUBLIC_URL', '')}/reset-password?token={token}"
     logger.info(f"[PASSWORD RESET] For {email} — link: {reset_link}")
-    return {"ok": True, "message": "If the email exists, a reset link has been sent.", "debug_link": reset_link}
+
+    business_name = "NK Prestige Steel Corporation"
+    info_doc = await db.business_info.find_one({"_id": "singleton"})
+    if info_doc and info_doc.get("business_name"):
+        business_name = info_doc["business_name"]
+
+    email_sent = _send_reset_email(email, reset_link, business_name)
+    resp = {"ok": True, "message": "If the email exists, a reset link has been sent."}
+    # Only expose debug_link when email delivery is NOT configured / failed —
+    # keeps behaviour identical in production once a real RESEND_API_KEY is set.
+    if not email_sent:
+        resp["debug_link"] = reset_link
+    return resp
 
 
 @api_router.post("/auth/reset-password")
